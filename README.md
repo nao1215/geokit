@@ -13,24 +13,9 @@ Gleam. Runs on the Erlang and JavaScript targets.
 gleam add geokit
 ```
 
-## Modules
+## Usage
 
-| Module | What it does |
-|---|---|
-| [`geokit/latlng`](https://hexdocs.pm/geokit/geokit/latlng.html) | Opaque `LatLng` (geographic coordinate), constructor with validation, longitude-wrap helper. |
-| [`geokit/distance`](https://hexdocs.pm/geokit/geokit/distance.html) | Haversine great-circle distance in metres and kilometres. |
-| [`geokit/bearing`](https://hexdocs.pm/geokit/geokit/bearing.html) | Initial and final compass bearing between two points. |
-| [`geokit/geohash`](https://hexdocs.pm/geokit/geokit/geohash.html) | Niemeyer geohash: encode, decode, decode bounds, eight-direction neighbours. |
-| [`geokit/polyline`](https://hexdocs.pm/geokit/geokit/polyline.html) | Google Encoded Polyline (precision 5 and 6). |
-| [`geokit/mercator`](https://hexdocs.pm/geokit/geokit/mercator.html) | Web Mercator (EPSG:3857) tile and Bing quadkey conversion. |
-| [`geokit/geometry`](https://hexdocs.pm/geokit/geokit/geometry.html) | `Geometry` ADT (`Point` / `LineString` / `Polygon` / `MultiPolygon`) shared by the ops below. |
-| [`geokit/bbox`](https://hexdocs.pm/geokit/geokit/bbox.html) | Axis-aligned bounding box of a geometry. |
-| [`geokit/centroid`](https://hexdocs.pm/geokit/geokit/centroid.html) | Geometric centroid (signed-area weighted for polygons). |
-| [`geokit/simplify`](https://hexdocs.pm/geokit/geokit/simplify.html) | Douglas-Peucker line simplification. |
-
-## Examples
-
-### Haversine distance and initial bearing
+Haversine distance and initial bearing:
 
 ```gleam
 import geokit/bearing
@@ -49,38 +34,46 @@ pub fn tokyo_to_osaka() -> #(Float, Float) {
 }
 ```
 
-### Geohash encode / decode / neighbour lookup
+Geohash encode, decode, and neighbour lookup:
 
 ```gleam
 import geokit/geohash
 import geokit/latlng
 
-pub fn around_tokyo() -> String {
+pub fn around_tokyo() -> Nil {
   let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
   let assert Ok(hash) = geohash.encode(point: tokyo, precision: 8)
   // hash == "xn76urx6"
+
+  let assert Ok(centre) = geohash.decode(hash: hash)
+  // centre ≈ tokyo (within the cell's precision)
+
   let assert Ok(neighbours) = geohash.neighbors(hash: hash)
   // neighbours.north, neighbours.east, ... eight directions
-  hash
+  Nil
 }
 ```
 
-### Google Encoded Polyline
+Google Encoded Polyline:
 
 ```gleam
 import geokit/latlng
 import geokit/polyline
 
-pub fn route() -> String {
+pub fn route() -> Nil {
   let assert Ok(p1) = latlng.new(lat: 38.5, lng: -120.2)
   let assert Ok(p2) = latlng.new(lat: 40.7, lng: -120.95)
   let assert Ok(p3) = latlng.new(lat: 43.252, lng: -126.453)
-  polyline.encode(points: [p1, p2, p3])
-  // == "_p~iF~ps|U_ulLnnqC_mqNvxq`@"
+
+  let encoded = polyline.encode(points: [p1, p2, p3])
+  // encoded == "_p~iF~ps|U_ulLnnqC_mqNvxq`@"
+
+  let assert Ok(_decoded) = polyline.decode(input: encoded)
+  Nil
 }
 ```
 
-### Web Mercator tile and quadkey
+Web Mercator tile and Bing quadkey:
 
 ```gleam
 import geokit/latlng
@@ -89,11 +82,15 @@ import geokit/mercator
 pub fn tokyo_tile_at_zoom_5() -> #(Int, Int, String) {
   let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
   let assert Ok(tile) = mercator.from_lat_lng(point: tokyo, zoom: 5)
-  #(mercator.x(tile: tile), mercator.y(tile: tile), mercator.to_quadkey(tile: tile))
+  #(
+    mercator.x(tile: tile),
+    mercator.y(tile: tile),
+    mercator.to_quadkey(tile: tile),
+  )
 }
 ```
 
-### Bounding box, centroid, simplify
+Bounding box, centroid, line simplification:
 
 ```gleam
 import geokit/bbox
@@ -108,15 +105,16 @@ pub fn polygon_ops() {
   let assert Ok(c) = latlng.new(lat: 10.0, lng: 10.0)
   let assert Ok(d) = latlng.new(lat: 10.0, lng: 0.0)
   let polygon = geometry.Polygon([[a, b, c, d, a]])
+
   let assert Ok(#(sw, ne)) = bbox.compute(geometry: polygon)
-  // sw / ne are the SW / NE corners.
   let assert Ok(centre) = centroid.compute(geometry: polygon)
-  // centre ≈ (5.0, 5.0).
   let assert Ok(reduced) =
     simplify.line_string(points: [a, b, c, d], tolerance: 0.001)
   #(sw, ne, centre, reduced)
 }
 ```
+
+Full API reference: <https://hexdocs.pm/geokit/>.
 
 ## Notes
 
@@ -124,14 +122,14 @@ pub fn polygon_ops() {
   `[-180, 180]`. The opaque `LatLng` type enforces this at
   construction; use `latlng.wrap` when your source data may be
   denormalised.
-- Distance and bearing use the **spherical-earth** approximation with
-  the WGS84 mean radius of 6_371_008.8 m. The error against an
+- Distance and bearing use the spherical-earth approximation with the
+  WGS84 mean radius of 6_371_008.8 m. The error against an
   ellipsoidal (Vincenty) distance is bounded by 0.5 % anywhere on
   Earth.
-- All polygon / line operations treat the lat/lng plane as flat — no
+- All polygon and line operations treat the lat/lng plane as flat — no
   projection is applied. For polygons spanning more than a few
   degrees, project to Web Mercator via `geokit/mercator` first.
-- Bounding boxes do **not** wrap around the antimeridian.
+- Bounding boxes do not wrap around the antimeridian.
 
 ## License
 
