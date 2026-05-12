@@ -73,6 +73,50 @@ pub fn route() -> Nil {
 }
 ```
 
+GeoJSON encode and decode (RFC 7946):
+
+```gleam
+import gleam/dynamic/decode
+import gleam/json
+import gleam/option.{None}
+
+import geokit/geojson
+import geokit/geometry
+import geokit/latlng
+
+type City {
+  City(name: String, population: Int)
+}
+
+fn city_to_json(c: City) -> json.Json {
+  json.object([
+    #("name", json.string(c.name)),
+    #("population", json.int(c.population)),
+  ])
+}
+
+fn city_decoder() -> decode.Decoder(City) {
+  use name <- decode.field("name", decode.string)
+  use population <- decode.field("population", decode.int)
+  decode.success(City(name: name, population: population))
+}
+
+pub fn round_trip() -> Nil {
+  let assert Ok(p) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let feature =
+    geojson.Feature(
+      geometry: geometry.Point(p),
+      properties: City(name: "Tokyo", population: 13_960_000),
+      id: None,
+    )
+  let encoded =
+    geojson.encode_feature(feature: feature, properties: city_to_json)
+  let assert Ok(_decoded) =
+    geojson.decode_feature(input: encoded, properties: city_decoder())
+  Nil
+}
+```
+
 Web Mercator tile and Bing quadkey:
 
 ```gleam
