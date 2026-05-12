@@ -5,83 +5,77 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project is expected to follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
-### Added
-
-- `geokit/mercator.new` — canonical opaque-`Tile` constructor, named
-  for parity with `geokit/latlng.new`. Resolves
-  nao1215/geokit#4.
-- `geokit/simplify.compute` — `Geometry`-polymorphic Douglas-Peucker
-  that matches the call shape of `bbox.compute` and
-  `centroid.compute`. Handles `Point` (unchanged), `LineString`,
-  `Polygon` (each ring), and `MultiPolygon` (each polygon).
-  Resolves nao1215/geokit#5.
-
-### Changed
-
-- `geokit/geohash.decode`, `decode_bounds`, `neighbor`, and
-  `neighbors` now accept upper-case input by folding to lower-case
-  before lookup, matching `chrisveness/latlon-geohash` and
-  `ngeohash`. `encode` still emits lower-case. Resolves
-  nao1215/geokit#2.
-- `geokit/simplify.line_string` docstring now states the canonical
-  Douglas-Peucker behaviour: `tolerance = 0.0` drops exactly-collinear
-  intermediate points (the previous "keeps every point" wording
-  contradicted the strict-greater-than comparison in the
-  implementation). Resolves nao1215/geokit#3.
-
-### Deprecated
-
-- `geokit/mercator.tile` — superseded by `geokit/mercator.new`. The
-  alias is kept for one release cycle and will be removed in v1.0.
-
 ## [0.1.0] - 2026-05-12
 
-Initial release. The ten modules below cover spherical-earth math,
+Initial release. Ten modules covering spherical-earth math,
 location-string encodings, Web Mercator tile / quadkey conversion,
-and basic geometry operations. The package targets both Erlang and
-JavaScript.
+and basic geometry operations. Runs on both the Erlang and JavaScript
+targets.
 
 ### Added
 
 - `geokit/latlng` — opaque `LatLng` type with validated `new`,
   longitude-wrap `wrap`, accessors `lat` / `lng`, and value
   equality `equal`.
-- `geokit/distance` — `haversine` great-circle distance (in metres
-  and kilometres) using the WGS84 mean Earth radius (6_371_008.8 m).
+- `geokit/distance` — `haversine` and `haversine_km` great-circle
+  distance using the WGS84 mean Earth radius (6_371_008.8 m).
 - `geokit/bearing` — `initial` and `final` compass bearing in
   degrees in `[0, 360)`.
-- `geokit/geohash` — Niemeyer base32 geohash: `encode` /
-  `decode` / `decode_bounds` / eight-direction `neighbor` and
-  `neighbors`.
+- `geokit/geohash` — Niemeyer base32 geohash: `encode` / `decode` /
+  `decode_bounds` / eight-direction `neighbor` and `neighbors`.
+  Decode operations accept upper-case input.
 - `geokit/polyline` — Google Encoded Polyline algorithm: `encode` /
   `decode` at precision 5 (default), plus `encode_with` /
-  `decode_with` for arbitrary precision (Valhalla / OSRM compatible).
-- `geokit/mercator` — Web Mercator (EPSG:3857) opaque `Tile` type,
-  `from_lat_lng` / `to_lat_lng` / `bounds`, Bing quadkey
-  encode / decode.
+  `decode_with` for precision in `[1, 11]`. Out-of-range precision
+  returns `Error(PrecisionOutOfRange)`.
+- `geokit/mercator` — Web Mercator (EPSG:3857) opaque `Tile` type
+  with `new`, `from_lat_lng`, `to_lat_lng`, `bounds`. Bing-style
+  quadkey encode / decode via `to_quadkey` / `from_quadkey`;
+  quadkey length is bounded by the documented `[0, 30]` zoom range.
 - `geokit/geometry` — `Geometry` ADT (`Point` / `LineString` /
-  `Polygon` / `MultiPolygon`) used by the geometry ops below.
-- `geokit/bbox` — axis-aligned bounding box of a `Geometry`.
-- `geokit/centroid` — signed-area-weighted centroid for polygons,
-  arithmetic mean for line strings.
-- `geokit/simplify` — Douglas-Peucker polyline simplification.
+  `Polygon` / `MultiPolygon`) shared by the operations below.
+- `geokit/bbox` — `compute` axis-aligned bounding box of a `Geometry`.
+- `geokit/centroid` — `compute` centroid (signed-area-weighted for
+  polygons, arithmetic mean for line strings).
+- `geokit/simplify` — Douglas-Peucker line simplification:
+  `compute` is `Geometry`-polymorphic; `line_string` accepts a bare
+  `List(LatLng)`.
+
+### Deprecated
+
+- `geokit/mercator.tile` — superseded by `geokit/mercator.new`,
+  named for parity with `geokit/latlng.new`. Kept as an alias for
+  one release cycle; will be removed in v1.0.
 
 ### Notes
 
 - All trigonometric functions come from
-  [`gleam_community_maths`](https://hex.pm/packages/gleam_community_maths) —
-  no FFI is used.
+  [`gleam_community_maths`](https://hex.pm/packages/gleam_community_maths)
+  — no FFI is used.
 - The lat/lng plane is treated as Cartesian for bounding-box,
-  centroid, and simplification ops. For polygons spanning more than
-  a few degrees, project to Web Mercator via `geokit/mercator`
-  before computing area-sensitive properties.
-- Spherical-earth distances are reported using the WGS84 mean
-  Earth radius (6_371_008.8 m). Error against an ellipsoidal
-  Vincenty distance is bounded by 0.5 % anywhere on Earth.
-- Niemeyer geohash uses **strict** greater-than comparison at cell
+  centroid, and simplification operations. For polygons spanning
+  more than a few degrees, project to Web Mercator via
+  `geokit/mercator` before computing area-sensitive properties.
+- Spherical-earth distances use the WGS84 mean Earth radius
+  (6_371_008.8 m). Error against an ellipsoidal (Vincenty) distance
+  is bounded by 0.5 % anywhere on Earth.
+- Niemeyer geohash uses strict greater-than comparison at cell
   midpoints (matching `ngeohash`, OpenStreetMap's tile boundaries,
-  and most server-side implementations). At the boundary `(0, 0)` a
-  precision-5 hash is `"7zzzz"`, not `"s0000"` — the latter would
-  require non-strict comparison and is not the standard.
+  and most server-side implementations). At the boundary `(0, 0)`
+  a precision-5 hash is `"7zzzz"`, not `"s0000"`.
+
+### Quality assurance
+
+The release was hardened by three rounds of `gleam-dig-bug`:
+
+- Differential testing against reference implementations
+  (Python `math`, `ngeohash`, `@mapbox/polyline`, OSM tile / Bing
+  quadkey formulas, `@turf/bbox` / `@turf/centroid` / `@turf/simplify`).
+- Property-based and metamorphic testing using
+  [`metamon`](https://github.com/nao1215/metamon).
+- Random and mutation fuzzing of every parser-shaped public function.
+
+Final state: 213 tests pass on both Erlang and JavaScript targets;
+`gleam run -m glinter` reports zero warnings or errors under
+`warnings_as_errors = true`; the CI matrix is green on
+Linux / macOS / Windows × Erlang / JavaScript.
