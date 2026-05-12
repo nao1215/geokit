@@ -46,7 +46,10 @@ pub type MercatorError {
 
 /// Build a [`Tile`](#Tile). `zoom` must be in `[0, 30]`; `x` and `y`
 /// must each be in `[0, 2^zoom)`.
-pub fn tile(zoom zoom: Int, x x: Int, y y: Int) -> Result(Tile, MercatorError) {
+///
+/// Matches the constructor naming convention used by every other
+/// opaque type in geokit (e.g. [`latlng.new`](../latlng.html#new)).
+pub fn new(zoom zoom: Int, x x: Int, y y: Int) -> Result(Tile, MercatorError) {
   use <- bool.guard(
     when: zoom < 0 || zoom > 30,
     return: Error(ZoomOutOfRange(zoom: zoom)),
@@ -57,6 +60,13 @@ pub fn tile(zoom zoom: Int, x x: Int, y y: Int) -> Result(Tile, MercatorError) {
     return: Error(TileCoordOutOfRange(zoom: zoom, x: x, y: y)),
   )
   Ok(Tile(zoom: zoom, x: x, y: y))
+}
+
+/// Build a [`Tile`](#Tile). Alias for [`new`](#new) kept for backward
+/// compatibility; new code should call [`new`](#new) instead.
+@deprecated("Use mercator.new — the constructor was renamed for parity with latlng.new (will be removed in 1.0).")
+pub fn tile(zoom zoom: Int, x x: Int, y y: Int) -> Result(Tile, MercatorError) {
+  new(zoom: zoom, x: x, y: y)
 }
 
 /// Zoom level of `tile`.

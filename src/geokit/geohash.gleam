@@ -184,6 +184,9 @@ fn bits_to_base32(bits: List(Int), acc: String) -> String {
 
 /// Decode a geohash to the centre of the cell it identifies.
 ///
+/// The input is case-insensitive: upper-case characters are folded
+/// to lower-case before lookup.
+///
 /// ```gleam
 /// import geokit/geohash
 ///
@@ -199,11 +202,16 @@ pub fn decode(hash hash: String) -> Result(LatLng, GeohashError) {
 
 /// Decode a geohash to the south-west and north-east corners of its
 /// cell, returned as a tuple `#(sw, ne)`.
+///
+/// The input is case-insensitive: upper-case characters are folded to
+/// lower-case before lookup. This matches `chrisveness/latlon-geohash`
+/// and `ngeohash`.
 pub fn decode_bounds(
   hash hash: String,
 ) -> Result(#(LatLng, LatLng), GeohashError) {
-  use <- bool.guard(when: hash == "", return: Error(EmptyHash))
-  use bits <- result.try(hash_to_bits(hash: hash, position: 0, acc: []))
+  let normalised = string.lowercase(hash)
+  use <- bool.guard(when: normalised == "", return: Error(EmptyHash))
+  use bits <- result.try(hash_to_bits(hash: normalised, position: 0, acc: []))
   let #(lat_min, lat_max, lng_min, lng_max) =
     decode_bits(
       bits: list.reverse(bits),
@@ -374,19 +382,24 @@ const border_w_odd: String = "028b"
 /// [`EmptyHash`](#GeohashError) when a polar neighbour would cross
 /// the pole (north of the northernmost row or south of the
 /// southernmost row).
+///
+/// The input is case-insensitive: upper-case characters are folded
+/// to lower-case before lookup, matching `chrisveness/latlon-geohash`
+/// and `ngeohash`.
 pub fn neighbor(
   hash hash: String,
   direction direction: Direction,
 ) -> Result(String, GeohashError) {
+  let normalised = string.lowercase(hash)
   case direction {
-    North -> step(hash: hash, direction: North)
-    South -> step(hash: hash, direction: South)
-    East -> step(hash: hash, direction: East)
-    West -> step(hash: hash, direction: West)
-    NorthEast -> two_steps(hash: hash, first: North, second: East)
-    NorthWest -> two_steps(hash: hash, first: North, second: West)
-    SouthEast -> two_steps(hash: hash, first: South, second: East)
-    SouthWest -> two_steps(hash: hash, first: South, second: West)
+    North -> step(hash: normalised, direction: North)
+    South -> step(hash: normalised, direction: South)
+    East -> step(hash: normalised, direction: East)
+    West -> step(hash: normalised, direction: West)
+    NorthEast -> two_steps(hash: normalised, first: North, second: East)
+    NorthWest -> two_steps(hash: normalised, first: North, second: West)
+    SouthEast -> two_steps(hash: normalised, first: South, second: East)
+    SouthWest -> two_steps(hash: normalised, first: South, second: West)
   }
 }
 

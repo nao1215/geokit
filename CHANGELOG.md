@@ -7,6 +7,35 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+### Added
+
+- `geokit/mercator.new` — canonical opaque-`Tile` constructor, named
+  for parity with `geokit/latlng.new`. Resolves
+  nao1215/geokit#4.
+- `geokit/simplify.compute` — `Geometry`-polymorphic Douglas-Peucker
+  that matches the call shape of `bbox.compute` and
+  `centroid.compute`. Handles `Point` (unchanged), `LineString`,
+  `Polygon` (each ring), and `MultiPolygon` (each polygon).
+  Resolves nao1215/geokit#5.
+
+### Changed
+
+- `geokit/geohash.decode`, `decode_bounds`, `neighbor`, and
+  `neighbors` now accept upper-case input by folding to lower-case
+  before lookup, matching `chrisveness/latlon-geohash` and
+  `ngeohash`. `encode` still emits lower-case. Resolves
+  nao1215/geokit#2.
+- `geokit/simplify.line_string` docstring now states the canonical
+  Douglas-Peucker behaviour: `tolerance = 0.0` drops exactly-collinear
+  intermediate points (the previous "keeps every point" wording
+  contradicted the strict-greater-than comparison in the
+  implementation). Resolves nao1215/geokit#3.
+
+### Deprecated
+
+- `geokit/mercator.tile` — superseded by `geokit/mercator.new`. The
+  alias is kept for one release cycle and will be removed in v1.0.
+
 ## [0.1.0] - 2026-05-12
 
 Initial release. The ten modules below cover spherical-earth math,
