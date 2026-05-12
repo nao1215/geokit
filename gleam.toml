@@ -1,0 +1,75 @@
+name = "geokit"
+version = "0.1.0"
+description = "Spherical-earth math, location encodings, and geometry operations for Gleam: haversine, bearing, geohash, polyline, Web Mercator, bbox / centroid / simplify."
+licences = ["MIT"]
+repository = { type = "github", user = "nao1215", repo = "geokit" }
+links = [
+  { title = "Repository", href = "https://github.com/nao1215/geokit" },
+  { title = "Changelog", href = "https://github.com/nao1215/geokit/blob/main/CHANGELOG.md" },
+]
+gleam = ">= 1.15.0"
+
+[dependencies]
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+gleam_community_maths = ">= 2.0.0 and < 3.0.0"
+
+[dev-dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"
+glinter = ">= 2.14.0 and < 3.0.0"
+
+[tools.glinter]
+warnings_as_errors = true
+include = ["src/", "test/"]
+
+[tools.glinter.rules]
+assert_ok_pattern = "error"
+avoid_panic = "error"
+avoid_todo = "error"
+deep_nesting = "error"
+discarded_result = "error"
+division_by_zero = "error"
+duplicate_import = "error"
+echo = "error"
+error_context_lost = "error"
+ffi_usage = "error"
+function_complexity = "error"
+label_possible = "error"
+missing_labels = "error"
+missing_type_annotation = "error"
+module_complexity = "error"
+panic_without_message = "error"
+prefer_guard_clause = "error"
+redundant_case = "error"
+short_variable_name = "error"
+string_inspect = "error"
+stringly_typed_error = "error"
+thrown_away_error = "error"
+todo_without_message = "error"
+trailing_underscore = "error"
+unnecessary_string_concatenation = "error"
+unnecessary_variable = "error"
+unqualified_import = "error"
+# Disabled: every public function in a leaf library module is — by design —
+# only consumed by external callers, so glinter treats them as "unused".
+unused_exports = "off"
+unwrap_used = "error"
+
+[tools.glinter.ignore]
+"test/**/*.gleam" = [
+  "assert_ok_pattern",
+  "label_possible",
+  "missing_type_annotation",
+  "short_variable_name",
+  "thrown_away_error",
+  "unused_exports",
+]
+# Geo math modules use conventional short names (a, c, p, x, y, n, k, r)
+"src/geokit/distance.gleam" = ["short_variable_name"]
+"src/geokit/bearing.gleam" = ["short_variable_name"]
+"src/geokit/geohash.gleam" = ["short_variable_name"]
+"src/geokit/polyline.gleam" = ["short_variable_name"]
+"src/geokit/mercator.gleam" = ["short_variable_name"]
+"src/geokit/bbox.gleam" = ["short_variable_name"]
+"src/geokit/centroid.gleam" = ["short_variable_name"]
+"src/geokit/simplify.gleam" = ["short_variable_name"]
+"src/geokit/latlng.gleam" = ["short_variable_name"]
