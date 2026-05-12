@@ -386,10 +386,13 @@ fn polyline_round_trips(
   precision: Int,
   tol: Float,
 ) -> Bool {
-  let encoded = polyline.encode_with(points: points, precision: precision)
-  case polyline.decode_with(input: encoded, precision: precision) {
+  case polyline.encode_with(points: points, precision: precision) {
     Error(_) -> False
-    Ok(decoded) -> lists_close_enough(points, decoded, tol)
+    Ok(encoded) ->
+      case polyline.decode_with(input: encoded, precision: precision) {
+        Error(_) -> False
+        Ok(decoded) -> lists_close_enough(points, decoded, tol)
+      }
   }
 }
 
@@ -411,8 +414,10 @@ pub fn pbt_polyline_encode_default_matches_precision_5_test() -> Nil {
   metamon.forall(
     generator.list_of(latlng_gen(), range.constant(0, 6)),
     fn(points) {
-      polyline.encode(points: points)
-      == polyline.encode_with(points: points, precision: 5)
+      case polyline.encode_with(points: points, precision: 5) {
+        Ok(encoded) -> polyline.encode(points: points) == encoded
+        Error(_) -> False
+      }
     },
   )
 }

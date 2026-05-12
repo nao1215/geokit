@@ -77,7 +77,7 @@ pub fn round_trip_test() -> Nil {
 pub fn round_trip_precision_6_test() -> Nil {
   let assert Ok(a) = latlng.new(lat: 35.681234, lng: 139.767123)
   let assert Ok(b) = latlng.new(lat: 34.693712, lng: 135.502345)
-  let encoded = polyline.encode_with(points: [a, b], precision: 6)
+  let assert Ok(encoded) = polyline.encode_with(points: [a, b], precision: 6)
   let assert Ok(decoded) = polyline.decode_with(input: encoded, precision: 6)
   let assert [a2, b2] = decoded
   approx_equal(latlng.lat(a), latlng.lat(a2), 0.000001)
@@ -103,6 +103,59 @@ pub fn decode_truncated_test() -> Nil {
   case polyline.decode(input: "_") {
     // "_" = 0x5F, value = 32 = continuation byte without termination
     Error(polyline.TruncatedInput) -> Nil
+    _ -> should.be_true(False)
+  }
+}
+
+// --- precision validation (regression for #10) ---------------------------
+
+pub fn encode_with_rejects_zero_precision_test() -> Nil {
+  let assert Ok(p) = latlng.new(lat: 35.0, lng: 139.0)
+  case polyline.encode_with(points: [p], precision: 0) {
+    Error(polyline.PrecisionOutOfRange(precision: 0)) -> Nil
+    _ -> should.be_true(False)
+  }
+}
+
+pub fn encode_with_rejects_negative_precision_test() -> Nil {
+  let assert Ok(p) = latlng.new(lat: 35.0, lng: 139.0)
+  case polyline.encode_with(points: [p], precision: -1) {
+    Error(polyline.PrecisionOutOfRange(precision: -1)) -> Nil
+    _ -> should.be_true(False)
+  }
+}
+
+pub fn encode_with_rejects_too_large_precision_test() -> Nil {
+  let assert Ok(p) = latlng.new(lat: 35.0, lng: 139.0)
+  case polyline.encode_with(points: [p], precision: 12) {
+    Error(polyline.PrecisionOutOfRange(precision: 12)) -> Nil
+    _ -> should.be_true(False)
+  }
+}
+
+pub fn encode_with_accepts_max_precision_11_test() -> Nil {
+  let assert Ok(p) = latlng.new(lat: 35.0, lng: 139.0)
+  let assert Ok(_) = polyline.encode_with(points: [p], precision: 11)
+  Nil
+}
+
+pub fn decode_with_rejects_zero_precision_test() -> Nil {
+  case polyline.decode_with(input: "_p~iF~ps|U", precision: 0) {
+    Error(polyline.PrecisionOutOfRange(precision: 0)) -> Nil
+    _ -> should.be_true(False)
+  }
+}
+
+pub fn decode_with_rejects_negative_precision_test() -> Nil {
+  case polyline.decode_with(input: "_p~iF~ps|U", precision: -1) {
+    Error(polyline.PrecisionOutOfRange(precision: -1)) -> Nil
+    _ -> should.be_true(False)
+  }
+}
+
+pub fn decode_with_rejects_too_large_precision_test() -> Nil {
+  case polyline.decode_with(input: "_p~iF~ps|U", precision: 12) {
+    Error(polyline.PrecisionOutOfRange(precision: 12)) -> Nil
     _ -> should.be_true(False)
   }
 }

@@ -437,8 +437,8 @@ pub fn diff_polyline_encode_precision_6_test() -> Nil {
   //   = "c|x`cAetuqiGbwg{@rshcG"
   let assert Ok(p1) = latlng.new(lat: 35.681_234, lng: 139.767_123)
   let assert Ok(p2) = latlng.new(lat: 34.693_712, lng: 135.502_345)
-  polyline.encode_with(points: [p1, p2], precision: 6)
-  |> should.equal("c|x`cAetuqiGbwg{@rshcG")
+  let assert Ok(encoded) = polyline.encode_with(points: [p1, p2], precision: 6)
+  encoded |> should.equal("c|x`cAetuqiGbwg{@rshcG")
 }
 
 pub fn diff_polyline_encode_single_non_origin_test() -> Nil {

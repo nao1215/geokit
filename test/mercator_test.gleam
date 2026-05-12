@@ -145,3 +145,30 @@ pub fn quadkey_empty_test() -> Nil {
     _ -> should.be_true(False)
   }
 }
+
+pub fn quadkey_too_long_31_chars_rejected_test() -> Nil {
+  // Regression for #9: from_quadkey used to accept inputs longer
+  // than 30 chars and produce Tile values with zoom outside the
+  // [0, 30] range that mercator.new accepts. The two constructors
+  // must agree on the valid domain.
+  case mercator.from_quadkey(quadkey: "0000000000000000000000000000000") {
+    Error(mercator.ZoomOutOfRange(zoom: 31)) -> Nil
+    _ -> should.be_true(False)
+  }
+}
+
+pub fn quadkey_too_long_50_chars_rejected_test() -> Nil {
+  let qk = "00000000000000000000000000000000000000000000000000"
+  case mercator.from_quadkey(quadkey: qk) {
+    Error(mercator.ZoomOutOfRange(zoom: 50)) -> Nil
+    _ -> should.be_true(False)
+  }
+}
+
+pub fn quadkey_at_max_length_30_accepted_test() -> Nil {
+  // Length 30 is the documented upper bound — it must still parse.
+  let qk = "000000000000000000000000000000"
+  let assert Ok(t) = mercator.from_quadkey(quadkey: qk)
+  mercator.zoom(tile: t)
+  |> should.equal(30)
+}

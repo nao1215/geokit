@@ -166,16 +166,22 @@ fn to_quadkey_loop(tile tile: Tile, level level: Int, acc acc: String) -> String
 }
 
 /// Decode a quadkey to a [`Tile`](#Tile). The resulting `zoom` equals
-/// the length of the quadkey.
+/// the length of the quadkey, which must be in `[1, 30]` to mirror
+/// the range accepted by [`new`](#new).
 pub fn from_quadkey(quadkey quadkey: String) -> Result(Tile, MercatorError) {
   use <- bool.guard(when: quadkey == "", return: Error(EmptyQuadkey))
-  use #(x_int, y_int, length) <- result.try(from_quadkey_loop(
+  let length = string.length(quadkey)
+  use <- bool.guard(
+    when: length > 30,
+    return: Error(ZoomOutOfRange(zoom: length)),
+  )
+  use #(x_int, y_int, parsed_length) <- result.try(from_quadkey_loop(
     chars: string.to_graphemes(quadkey),
     position: 0,
     x: 0,
     y: 0,
   ))
-  Ok(Tile(zoom: length, x: x_int, y: y_int))
+  Ok(Tile(zoom: parsed_length, x: x_int, y: y_int))
 }
 
 fn from_quadkey_loop(
