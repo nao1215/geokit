@@ -17,7 +17,8 @@ import gleam/string
 
 import geokit/latlng.{type LatLng}
 
-/// Errors returned by [`decode`](#decode).
+/// Errors returned by [`encode_with`](#encode_with), [`decode`](#decode),
+/// and [`decode_with`](#decode_with).
 pub type PolylineError {
   /// The input string was malformed — typically a continuation byte
   /// without a corresponding stop byte (high bit set on the last
@@ -26,6 +27,11 @@ pub type PolylineError {
   /// A character outside the printable ASCII range used by the
   /// encoding appeared in the input.
   InvalidCharacter(char: String, position: Int)
+  /// `precision` was outside the supported range `[1, 11]`. The
+  /// Google reference encoding uses 5; Valhalla and OSRM use 6.
+  /// Precisions above 11 overflow the safe integer range on the
+  /// JavaScript target.
+  PrecisionOutOfRange(precision: Int)
 }
 
 // --- Encode --------------------------------------------------------------
@@ -45,13 +51,28 @@ pub type PolylineError {
 /// // == "_p~iF~ps|U_ulLnnqC_mqNvxq`@"
 /// ```
 pub fn encode(points points: List(LatLng)) -> String {
-  encode_with(points: points, precision: 5)
+  // Precision 5 is statically valid, so we bypass the precision
+  // check that `encode_with` enforces at runtime and call the
+  // internal encoder directly.
+  encode_unchecked(points: points, precision: 5)
 }
 
 /// Encode a list of points with the given precision (number of
-/// decimal digits to preserve). Precision 6 is used by Valhalla and
-/// the Open Source Routing Machine for higher accuracy.
+/// decimal digits to preserve). `precision` must be in `[1, 11]`;
+/// precision 6 is used by Valhalla and the Open Source Routing
+/// Machine for higher accuracy than the Google default of 5.
 pub fn encode_with(
+  points points: List(LatLng),
+  precision precision: Int,
+) -> Result(String, PolylineError) {
+  use <- bool.guard(
+    when: precision < 1 || precision > 11,
+    return: Error(PrecisionOutOfRange(precision: precision)),
+  )
+  Ok(encode_unchecked(points: points, precision: precision))
+}
+
+fn encode_unchecked(
   points points: List(LatLng),
   precision precision: Int,
 ) -> String {
@@ -124,11 +145,16 @@ pub fn decode(input input: String) -> Result(List(LatLng), PolylineError) {
 }
 
 /// Decode a polyline string with the given precision. Must match the
-/// precision used at encode time.
+/// precision used at encode time. `precision` must be in `[1, 11]`,
+/// matching [`encode_with`](#encode_with).
 pub fn decode_with(
   input input: String,
   precision precision: Int,
 ) -> Result(List(LatLng), PolylineError) {
+  use <- bool.guard(
+    when: precision < 1 || precision > 11,
+    return: Error(PrecisionOutOfRange(precision: precision)),
+  )
   let factor = pow10(precision)
   use #(raw_points, _) <- result.try(
     decode_loop(
