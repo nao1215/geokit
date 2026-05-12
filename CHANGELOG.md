@@ -7,10 +7,10 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [0.1.0] - 2026-05-12
 
-Initial release. Ten modules covering spherical-earth math,
+Initial release. Eleven modules covering spherical-earth math,
 location-string encodings, Web Mercator tile / quadkey conversion,
-and basic geometry operations. Runs on both the Erlang and JavaScript
-targets.
+basic geometry operations, and RFC 7946 GeoJSON I/O. Runs on both
+the Erlang and JavaScript targets.
 
 ### Added
 
@@ -28,6 +28,14 @@ targets.
   `decode` at precision 5 (default), plus `encode_with` /
   `decode_with` for precision in `[1, 11]`. Out-of-range precision
   returns `Error(PrecisionOutOfRange)`.
+- `geokit/geojson` — RFC 7946 GeoJSON encode / decode for `Geometry`,
+  `Feature(properties)`, and `FeatureCollection`. Properties are
+  user-typed via an injected `Json` builder (encode) and
+  `decode.Decoder` (decode), so application records flow through
+  end-to-end without dynamic conversion. `MultiPoint`,
+  `MultiLineString`, and `GeometryCollection` are rejected with
+  `UnsupportedType` since they are not currently representable in
+  the `Geometry` ADT.
 - `geokit/mercator` — Web Mercator (EPSG:3857) opaque `Tile` type
   with `new`, `from_lat_lng`, `to_lat_lng`, `bounds`. Bing-style
   quadkey encode / decode via `to_quadkey` / `from_quadkey`;
