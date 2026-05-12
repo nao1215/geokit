@@ -27,10 +27,24 @@ pub fn tokyo_to_osaka() -> #(Float, Float) {
   let assert Ok(osaka) = latlng.new(lat: 34.6937, lng: 135.5023)
   #(
     distance.haversine(a: tokyo, b: osaka),
-    // ≈ 402_785 m
+    // ≈ 402_784.74 m
     bearing.initial(from: tokyo, to: osaka),
-    // ≈ 254.0°
+    // ≈ 255.42°
   )
+}
+```
+
+Normalising denormalised coordinates with `latlng.wrap`:
+
+```gleam
+import geokit/latlng
+
+pub fn antimeridian_wrap() -> #(Float, Float) {
+  // A reading 1° past the antimeridian wraps to the western
+  // hemisphere; latitudes above 90° are clamped to the pole.
+  let point = latlng.wrap(lat: 91.0, lng: 181.0)
+  #(latlng.lat(point), latlng.lng(point))
+  // == #(90.0, -179.0)
 }
 ```
 
@@ -73,7 +87,7 @@ pub fn route() -> Nil {
 }
 ```
 
-GeoJSON encode and decode (RFC 7946):
+GeoJSON encode and decode (RFC 7946) — Feature with typed properties:
 
 ```gleam
 import gleam/dynamic/decode
@@ -114,6 +128,25 @@ pub fn round_trip() -> Nil {
   let assert Ok(_decoded) =
     geojson.decode_feature(input: encoded, properties: city_decoder())
   Nil
+}
+```
+
+Decoding a `FeatureCollection` from an external source — pass
+`decode.dynamic` when you don't care about typed properties:
+
+```gleam
+import gleam/dynamic/decode
+import gleam/list
+
+import geokit/geojson
+
+pub fn parse_collection(input: String) -> Int {
+  let assert Ok(features) =
+    geojson.decode_feature_collection(
+      input: input,
+      properties: decode.dynamic,
+    )
+  list.length(features)
 }
 ```
 
