@@ -19,7 +19,9 @@
 
 import gleam/bool
 import gleam/list
+import gleam/result
 
+import geokit/geometry.{type Geometry, LineString, MultiPolygon, Point, Polygon}
 import geokit/latlng.{type LatLng}
 
 /// Errors returned by [`line_string`](#line_string).
@@ -29,8 +31,14 @@ pub type SimplifyError {
 }
 
 /// Simplify a sequence of points using Douglas-Peucker.
-/// `tolerance` is in degrees. A tolerance of `0.0` keeps every
-/// point; larger values keep fewer points.
+/// `tolerance` is in degrees. Larger values keep fewer points.
+///
+/// A tolerance of `0.0` is the **canonical Douglas-Peucker
+/// behaviour**: it drops every intermediate point that lies
+/// *exactly* on the straight line between its surviving neighbours,
+/// because the comparison `perpendicular_distance >. tolerance` is
+/// strict. Use a tiny positive value (for example `1.0e-12`) if you
+/// want to preserve every point.
 ///
 /// ```gleam
 /// import geokit/simplify
@@ -56,6 +64,92 @@ pub fn line_string(
     [single] -> Ok([single])
     [a, b] -> Ok([a, b])
     _ -> Ok(dp(points: points, tolerance: tolerance))
+  }
+}
+
+/// Simplify any [`Geometry`](../geometry.html#Geometry), matching the
+/// [`bbox.compute`](../bbox.html#compute) /
+/// [`centroid.compute`](../centroid.html#compute) call shape.
+///
+/// - `Point` is returned unchanged.
+/// - `LineString` is simplified via [`line_string`](#line_string).
+/// - `Polygon` simplifies each ring; closure is preserved by always
+///   keeping the first and last vertex of each ring.
+/// - `MultiPolygon` recurses into each polygon.
+///
+/// ```gleam
+/// import geokit/geometry
+/// import geokit/simplify
+///
+/// let result =
+///   geometry.LineString([a, b, c])
+///   |> simplify.compute(tolerance: 0.001)
+/// ```
+pub fn compute(
+  geometry geometry: Geometry,
+  tolerance tolerance: Float,
+) -> Result(Geometry, SimplifyError) {
+  use <- bool.guard(
+    when: tolerance <. 0.0,
+    return: Error(NegativeTolerance(tolerance: tolerance)),
+  )
+  case geometry {
+    Point(_) -> Ok(geometry)
+    LineString(points) -> {
+      use simplified <- result.map(line_string(
+        points: points,
+        tolerance: tolerance,
+      ))
+      LineString(simplified)
+    }
+    Polygon(rings) -> {
+      use new_rings <- result.map(
+        simplify_rings(rings: rings, tolerance: tolerance, acc: []),
+      )
+      Polygon(new_rings)
+    }
+    MultiPolygon(polygons) -> {
+      use new_polygons <- result.map(
+        simplify_polygons(polygons: polygons, tolerance: tolerance, acc: []),
+      )
+      MultiPolygon(new_polygons)
+    }
+  }
+}
+
+fn simplify_rings(
+  rings rings: List(List(LatLng)),
+  tolerance tolerance: Float,
+  acc acc: List(List(LatLng)),
+) -> Result(List(List(LatLng)), SimplifyError) {
+  case rings {
+    [] -> Ok(list.reverse(acc))
+    [head, ..tail] -> {
+      use simplified <- result.try(line_string(
+        points: head,
+        tolerance: tolerance,
+      ))
+      simplify_rings(rings: tail, tolerance: tolerance, acc: [simplified, ..acc])
+    }
+  }
+}
+
+fn simplify_polygons(
+  polygons polygons: List(List(List(LatLng))),
+  tolerance tolerance: Float,
+  acc acc: List(List(List(LatLng))),
+) -> Result(List(List(List(LatLng))), SimplifyError) {
+  case polygons {
+    [] -> Ok(list.reverse(acc))
+    [head, ..tail] -> {
+      use simplified <- result.try(
+        simplify_rings(rings: head, tolerance: tolerance, acc: []),
+      )
+      simplify_polygons(polygons: tail, tolerance: tolerance, acc: [
+        simplified,
+        ..acc
+      ])
+    }
   }
 }
 

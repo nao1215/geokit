@@ -90,6 +90,40 @@ pub fn decode_invalid_char_test() -> Nil {
   }
 }
 
+// --- case insensitivity (issue #2) --------------------------------------
+
+pub fn decode_accepts_upper_case_test() -> Nil {
+  let assert Ok(lower) = geohash.decode("wypzpg")
+  let assert Ok(upper) = geohash.decode("WYPZPG")
+  latlng.equal(lower, upper)
+  |> should.be_true
+}
+
+pub fn decode_accepts_mixed_case_test() -> Nil {
+  let assert Ok(lower) = geohash.decode("xn76urx6")
+  let assert Ok(mixed) = geohash.decode("Xn76UrX6")
+  latlng.equal(lower, mixed)
+  |> should.be_true
+}
+
+pub fn neighbor_accepts_upper_case_test() -> Nil {
+  let assert Ok(lower) =
+    geohash.neighbor(hash: "wypzpg", direction: geohash.North)
+  let assert Ok(upper) =
+    geohash.neighbor(hash: "WYPZPG", direction: geohash.North)
+  upper
+  |> should.equal(lower)
+}
+
+pub fn neighbors_accepts_upper_case_test() -> Nil {
+  let assert Ok(lower) = geohash.neighbors(hash: "wypzpg")
+  let assert Ok(upper) = geohash.neighbors(hash: "WYPZPG")
+  upper.north
+  |> should.equal(lower.north)
+  upper.east
+  |> should.equal(lower.east)
+}
+
 // --- round-trip ----------------------------------------------------------
 
 pub fn round_trip_tokyo_test() -> Nil {
