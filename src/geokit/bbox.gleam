@@ -25,6 +25,31 @@ pub type BBoxError {
   EmptyGeometry
 }
 
+/// Convenience wrapper for callers who already hold a flat list of
+/// points and don't want to mint a [`LineString`](../geometry.html#Geometry)
+/// just to feed it in. Mirrors the
+/// [`simplify.line_string`](../simplify.html#line_string) shape:
+/// `LineString` carries edge / ordering semantics that
+/// `bbox.compute` does not actually use, so wrapping a bag of points
+/// in `LineString` reads as noise at the call site.
+///
+/// ```gleam
+/// import geokit/bbox
+/// import geokit/latlng
+///
+/// let assert Ok(a) = latlng.new(lat: 35.0, lng: 139.0)
+/// let assert Ok(b) = latlng.new(lat: 36.0, lng: 140.0)
+/// let assert Ok(#(sw, ne)) = bbox.of_points([a, b])
+/// ```
+///
+/// Equivalent to `bbox.compute(LineString(points))`. Empty input
+/// returns [`EmptyGeometry`](#BBoxError).
+pub fn of_points(
+  points points: List(LatLng),
+) -> Result(#(LatLng, LatLng), BBoxError) {
+  compute(geometry: LineString(points))
+}
+
 /// Compute the bounding box of `geometry` as `#(sw, ne)`.
 pub fn compute(
   geometry geometry: Geometry,

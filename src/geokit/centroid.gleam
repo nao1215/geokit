@@ -25,6 +25,32 @@ pub type CentroidError {
   EmptyGeometry
 }
 
+/// Convenience wrapper for callers who already hold a flat list of
+/// points and don't want to mint a [`LineString`](../geometry.html#Geometry)
+/// just to feed it in. Mirrors the
+/// [`simplify.line_string`](../simplify.html#line_string) shape:
+/// `LineString` carries edge / ordering semantics that the
+/// unweighted-mean-of-vertices computation used by
+/// `centroid.compute` for `LineString` does not actually rely on,
+/// so wrapping a bag of points in `LineString` reads as noise at
+/// the call site.
+///
+/// ```gleam
+/// import geokit/centroid
+/// import geokit/latlng
+///
+/// let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
+/// let assert Ok(b) = latlng.new(lat: 10.0, lng: 10.0)
+/// let assert Ok(c) = centroid.of_points([a, b])
+/// // c is the mean of a and b.
+/// ```
+///
+/// Equivalent to `centroid.compute(LineString(points))`. Empty input
+/// returns [`EmptyGeometry`](#CentroidError).
+pub fn of_points(points points: List(LatLng)) -> Result(LatLng, CentroidError) {
+  compute(geometry: LineString(points))
+}
+
 /// Compute the centroid of `geometry`.
 pub fn compute(geometry geometry: Geometry) -> Result(LatLng, CentroidError) {
   case geometry {

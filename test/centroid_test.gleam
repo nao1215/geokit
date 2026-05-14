@@ -75,3 +75,35 @@ pub fn centroid_empty_line_test() -> Nil {
     _ -> should.be_true(False)
   }
 }
+
+// --- of_points (List(LatLng) convenience wrapper) -----------------------
+
+pub fn centroid_of_points_matches_line_string_test() -> Nil {
+  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(b) = latlng.new(lat: 0.0, lng: 2.0)
+  let assert Ok(c) = latlng.new(lat: 2.0, lng: 0.0)
+  let assert Ok(d) = latlng.new(lat: 2.0, lng: 2.0)
+  let assert Ok(via_helper) = centroid.of_points([a, b, c, d])
+  let assert Ok(via_geom) =
+    centroid.compute(geometry: geometry.LineString([a, b, c, d]))
+  latlng.equal(via_helper, via_geom)
+  |> should.be_true
+  latlng.lat(via_helper)
+  |> should.equal(1.0)
+  latlng.lng(via_helper)
+  |> should.equal(1.0)
+}
+
+pub fn centroid_of_points_single_test() -> Nil {
+  let assert Ok(p) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(c) = centroid.of_points([p])
+  latlng.equal(c, p)
+  |> should.be_true
+}
+
+pub fn centroid_of_points_empty_test() -> Nil {
+  case centroid.of_points([]) {
+    Error(centroid.EmptyGeometry) -> Nil
+    _ -> should.be_true(False)
+  }
+}
