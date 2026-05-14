@@ -71,3 +71,43 @@ pub fn bbox_empty_polygon_test() -> Nil {
     _ -> should.be_true(False)
   }
 }
+
+// --- of_points (List(LatLng) convenience wrapper) -----------------------
+
+pub fn bbox_of_points_matches_line_string_test() -> Nil {
+  let assert Ok(a) = latlng.new(lat: 35.0, lng: 139.0)
+  let assert Ok(b) = latlng.new(lat: 36.0, lng: 140.0)
+  let assert Ok(c) = latlng.new(lat: 34.5, lng: 139.5)
+  let assert Ok(#(sw, ne)) = bbox.of_points([a, b, c])
+  latlng.lat(sw)
+  |> should.equal(34.5)
+  latlng.lat(ne)
+  |> should.equal(36.0)
+  latlng.lng(sw)
+  |> should.equal(139.0)
+  latlng.lng(ne)
+  |> should.equal(140.0)
+  // Same answer the LineString-based call gives.
+  let assert Ok(#(sw_via_geom, ne_via_geom)) =
+    bbox.compute(geometry: geometry.LineString([a, b, c]))
+  latlng.equal(sw, sw_via_geom)
+  |> should.be_true
+  latlng.equal(ne, ne_via_geom)
+  |> should.be_true
+}
+
+pub fn bbox_of_points_single_test() -> Nil {
+  let assert Ok(p) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(#(sw, ne)) = bbox.of_points([p])
+  latlng.equal(sw, p)
+  |> should.be_true
+  latlng.equal(ne, p)
+  |> should.be_true
+}
+
+pub fn bbox_of_points_empty_test() -> Nil {
+  case bbox.of_points([]) {
+    Error(bbox.EmptyGeometry) -> Nil
+    _ -> should.be_true(False)
+  }
+}

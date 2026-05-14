@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project is expected to follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `geokit/bbox.of_points` and `geokit/centroid.of_points`:
+  convenience entry points that take a flat `List(LatLng)` for
+  callers who don't already have a `Geometry` value. Mirrors the
+  shape `geokit/simplify` already exposes via
+  `simplify.line_string` versus `simplify.compute`, and removes
+  the noise of wrapping a bag of points in a `LineString` (which
+  implies edge / ordering semantics the bbox and centroid algorithms
+  don't actually depend on). Implemented as
+  `bbox.compute(LineString(points))` and
+  `centroid.compute(LineString(points))` so behaviour, including
+  empty-input `EmptyGeometry` errors, stays identical. (#13)
+
 ## [0.1.0] - 2026-05-12
 
 Initial release. Eleven modules covering spherical-earth math,
