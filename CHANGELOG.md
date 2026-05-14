@@ -7,6 +7,8 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-14
+
 ### Added
 
 - `geokit/bbox.of_points` and `geokit/centroid.of_points`:

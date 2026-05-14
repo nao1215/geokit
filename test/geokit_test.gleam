@@ -8,5 +8,5 @@ pub fn main() -> Nil {
 
 pub fn version_is_set_test() -> Nil {
   geokit.version()
-  |> should.equal("0.1.0")
+  |> should.equal("0.2.0")
 }
