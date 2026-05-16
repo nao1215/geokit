@@ -3,11 +3,11 @@
 //// Maps geokit's [`Geometry`](../geometry.html) ADT to and from the
 //// JSON shapes defined in RFC 7946:
 ////
-//// - `Point` / `LineString` / `Polygon` / `MultiPolygon` round-trip
-////   through this module.
-//// - `MultiPoint`, `MultiLineString`, and `GeometryCollection` are
-////   valid GeoJSON types but are not currently representable in
-////   `Geometry`; decoding returns [`UnsupportedType`](#GeoJsonError).
+//// - `Point` / `MultiPoint` / `LineString` / `Polygon` /
+////   `MultiPolygon` round-trip through this module.
+//// - `MultiLineString` and `GeometryCollection` are valid GeoJSON
+////   types but are not currently representable in `Geometry`;
+////   decoding returns [`UnsupportedType`](#GeoJsonError).
 ////
 //// Coordinate order in GeoJSON is `[longitude, latitude]`, opposite
 //// of the `lat: ..., lng: ...` constructors elsewhere in geokit.
@@ -42,8 +42,7 @@ pub type GeoJsonError {
   /// geometry or container type.
   UnknownType(type_: String)
   /// The `type` is a valid GeoJSON type but cannot be represented in
-  /// geokit's `Geometry` ADT (`MultiPoint`, `MultiLineString`,
-  /// `GeometryCollection`).
+  /// geokit's `Geometry` ADT (`MultiLineString`, `GeometryCollection`).
   UnsupportedType(type_: String)
   /// A coordinate array did not have the expected shape — fewer than
   /// two elements, or non-numeric entries.
@@ -141,6 +140,11 @@ pub fn decode_feature_collection(
 fn geometry_to_json(g: Geometry) -> Json {
   case g {
     geometry.Point(p) -> object_with_coords("Point", position_to_json(p))
+    geometry.MultiPoint(points) ->
+      object_with_coords(
+        "MultiPoint",
+        json.preprocessed_array(list.map(points, position_to_json)),
+      )
     geometry.LineString(points) ->
       object_with_coords(
         "LineString",
@@ -231,6 +235,13 @@ fn geometry_decoder() -> Decoder(Result(Geometry, GeoJsonError)) {
       use coords <- decode.field("coordinates", decode.list(decode.float))
       decode.success(raw_point_to_geometry(coords))
     }
+    "MultiPoint" -> {
+      use coords <- decode.field(
+        "coordinates",
+        decode.list(decode.list(decode.float)),
+      )
+      decode.success(raw_multi_point_to_geometry(coords))
+    }
     "LineString" -> {
       use coords <- decode.field(
         "coordinates",
@@ -252,7 +263,7 @@ fn geometry_decoder() -> Decoder(Result(Geometry, GeoJsonError)) {
       )
       decode.success(raw_multi_polygon_to_geometry(coords))
     }
-    "MultiPoint" | "MultiLineString" | "GeometryCollection" ->
+    "MultiLineString" | "GeometryCollection" ->
       decode.success(Error(UnsupportedType(type_)))
     other -> decode.success(Error(UnknownType(other)))
   }
@@ -268,6 +279,13 @@ fn raw_line_string_to_geometry(
 ) -> Result(Geometry, GeoJsonError) {
   use points <- result.map(list.try_map(coords, parse_position))
   geometry.LineString(points)
+}
+
+fn raw_multi_point_to_geometry(
+  coords: List(List(Float)),
+) -> Result(Geometry, GeoJsonError) {
+  use points <- result.map(list.try_map(coords, parse_position))
+  geometry.MultiPoint(points)
 }
 
 fn raw_polygon_to_geometry(

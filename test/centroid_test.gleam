@@ -107,3 +107,20 @@ pub fn centroid_of_points_empty_test() -> Nil {
     _ -> should.be_true(False)
   }
 }
+
+pub fn centroid_compute_multi_point_test() -> Nil {
+  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(b) = latlng.new(lat: 10.0, lng: 10.0)
+  let assert Ok(via_multi) =
+    centroid.compute(geometry: geometry.MultiPoint([a, b]))
+  let assert Ok(via_line) =
+    centroid.compute(geometry: geometry.LineString([a, b]))
+  latlng.equal(via_multi, via_line) |> should.be_true
+}
+
+pub fn centroid_compute_multi_point_empty_test() -> Nil {
+  case centroid.compute(geometry: geometry.MultiPoint([])) {
+    Error(centroid.EmptyGeometry) -> Nil
+    _ -> should.be_true(False)
+  }
+}

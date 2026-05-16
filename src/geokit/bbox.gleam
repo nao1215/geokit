@@ -15,7 +15,9 @@
 
 import gleam/bool
 
-import geokit/geometry.{type Geometry, LineString, MultiPolygon, Point, Polygon}
+import geokit/geometry.{
+  type Geometry, LineString, MultiPoint, MultiPolygon, Point, Polygon,
+}
 import geokit/latlng.{type LatLng}
 
 /// Errors returned by [`compute`](#compute).
@@ -42,12 +44,14 @@ pub type BBoxError {
 /// let assert Ok(#(sw, ne)) = bbox.of_points([a, b])
 /// ```
 ///
-/// Equivalent to `bbox.compute(LineString(points))`. Empty input
-/// returns [`EmptyGeometry`](#BBoxError).
+/// Equivalent to `bbox.compute(MultiPoint(points))` — wraps the list
+/// in the variant that matches a bag-of-points semantically (no edge
+/// or ordering implied). Empty input returns
+/// [`EmptyGeometry`](#BBoxError).
 pub fn of_points(
   points points: List(LatLng),
 ) -> Result(#(LatLng, LatLng), BBoxError) {
-  compute(geometry: LineString(points))
+  compute(geometry: MultiPoint(points))
 }
 
 /// Compute the bounding box of `geometry` as `#(sw, ne)`.
@@ -98,6 +102,7 @@ fn extend_loop(
 fn all_points(geometry: Geometry) -> List(LatLng) {
   case geometry {
     Point(p) -> [p]
+    MultiPoint(ps) -> ps
     LineString(ps) -> ps
     Polygon(rings) -> flatten_rings(rings)
     MultiPolygon(polygons) -> flatten_polygons(polygons)

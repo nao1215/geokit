@@ -111,3 +111,22 @@ pub fn bbox_of_points_empty_test() -> Nil {
     _ -> should.be_true(False)
   }
 }
+
+pub fn bbox_compute_multi_point_test() -> Nil {
+  let assert Ok(a) = latlng.new(lat: 35.0, lng: 139.0)
+  let assert Ok(b) = latlng.new(lat: 36.0, lng: 140.0)
+  // `MultiPoint` is the variant `of_points` now wraps callers in; the
+  // bbox answer must match the `LineString` form for the same points.
+  let assert Ok(#(sw, ne)) = bbox.compute(geometry: geometry.MultiPoint([a, b]))
+  let assert Ok(#(sw_via_line, ne_via_line)) =
+    bbox.compute(geometry: geometry.LineString([a, b]))
+  latlng.equal(sw, sw_via_line) |> should.be_true
+  latlng.equal(ne, ne_via_line) |> should.be_true
+}
+
+pub fn bbox_compute_multi_point_empty_test() -> Nil {
+  case bbox.compute(geometry: geometry.MultiPoint([])) {
+    Error(bbox.EmptyGeometry) -> Nil
+    _ -> should.be_true(False)
+  }
+}

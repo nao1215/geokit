@@ -152,11 +152,28 @@ pub fn decode_unknown_type_test() -> Nil {
   Nil
 }
 
-pub fn decode_unsupported_multi_point_test() -> Nil {
-  let assert Error(geojson.UnsupportedType("MultiPoint")) =
+pub fn decode_multi_point_test() -> Nil {
+  let assert Ok(geometry.MultiPoint([point_a, point_b])) =
     geojson.decode_geometry(
-      input: "{\"type\":\"MultiPoint\",\"coordinates\":[[0.0,0.0]]}",
+      // GeoJSON coordinate order is [longitude, latitude] — the
+      // decoder is expected to swap to geokit's `lat, lng` shape.
+      input: "{\"type\":\"MultiPoint\",\"coordinates\":[[139.0,35.0],[140.0,36.0]]}",
     )
+  let assert Ok(expected_a) = latlng.new(lat: 35.0, lng: 139.0)
+  let assert Ok(expected_b) = latlng.new(lat: 36.0, lng: 140.0)
+  let assert True = point_a == expected_a
+  let assert True = point_b == expected_b
+  Nil
+}
+
+pub fn encode_multi_point_round_trips_test() -> Nil {
+  let assert Ok(a) = latlng.new(lat: 35.0, lng: 139.0)
+  let assert Ok(b) = latlng.new(lat: 36.0, lng: 140.0)
+  let encoded = geojson.encode_geometry(geometry: geometry.MultiPoint([a, b]))
+  let assert Ok(geometry.MultiPoint([decoded_a, decoded_b])) =
+    geojson.decode_geometry(input: encoded)
+  let assert True = decoded_a == a
+  let assert True = decoded_b == b
   Nil
 }
 
