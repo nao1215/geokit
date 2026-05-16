@@ -7,6 +7,8 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-16
+
 ### Added
 
 - `geokit/geometry`: new `MultiPoint(points: List(LatLng))` variant on the `Geometry` ADT for non-connected point collections (geotagged events, IoT readings, customer pins, point clouds). Mirrors GeoJSON `MultiPoint` (RFC 7946 §3.1.3). `bbox.compute` and `centroid.compute` accept it and return the same coordinate-only answer they would have produced for the `LineString` workaround, but the type now matches the data's structure — operators that require connected segments will naturally reject `MultiPoint` at the type level instead of silently misbehaving. `simplify.compute` treats `MultiPoint` as a no-op (a bag of unconnected points has no inter-point edges to collapse). (#16)
