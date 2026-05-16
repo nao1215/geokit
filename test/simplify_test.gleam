@@ -125,6 +125,22 @@ pub fn compute_polygon_simplifies_each_ring_test() -> Nil {
   }
 }
 
+pub fn compute_multi_point_is_no_op_test() -> Nil {
+  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(b) = latlng.new(lat: 0.0, lng: 0.5)
+  let assert Ok(c) = latlng.new(lat: 0.0, lng: 1.0)
+  // A bag of points has no edges to collapse, so simplify leaves it
+  // unchanged regardless of tolerance.
+  let assert Ok(geom) =
+    simplify.compute(geometry: geometry.MultiPoint([a, b, c]), tolerance: 0.001)
+  case geom {
+    geometry.MultiPoint(points) ->
+      list.length(points)
+      |> should.equal(3)
+    _ -> should.be_true(False)
+  }
+}
+
 pub fn compute_multipolygon_recurses_test() -> Nil {
   let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
   let assert Ok(b) = latlng.new(lat: 0.0, lng: 0.5)

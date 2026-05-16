@@ -21,7 +21,9 @@ import gleam/bool
 import gleam/list
 import gleam/result
 
-import geokit/geometry.{type Geometry, LineString, MultiPolygon, Point, Polygon}
+import geokit/geometry.{
+  type Geometry, LineString, MultiPoint, MultiPolygon, Point, Polygon,
+}
 import geokit/latlng.{type LatLng}
 
 /// Errors returned by [`line_string`](#line_string).
@@ -95,6 +97,9 @@ pub fn compute(
   )
   case geometry {
     Point(_) -> Ok(geometry)
+    // A bag of unconnected points has no inter-point edges to
+    // collapse, so simplification is a no-op at any tolerance.
+    MultiPoint(_) -> Ok(geometry)
     LineString(points) -> {
       use simplified <- result.map(line_string(
         points: points,

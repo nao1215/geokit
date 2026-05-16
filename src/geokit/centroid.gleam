@@ -16,7 +16,9 @@ import gleam/bool
 import gleam/int
 import gleam/list
 
-import geokit/geometry.{type Geometry, LineString, MultiPolygon, Point, Polygon}
+import geokit/geometry.{
+  type Geometry, LineString, MultiPoint, MultiPolygon, Point, Polygon,
+}
 import geokit/latlng.{type LatLng}
 
 /// Errors returned by [`compute`](#compute).
@@ -45,16 +47,19 @@ pub type CentroidError {
 /// // c is the mean of a and b.
 /// ```
 ///
-/// Equivalent to `centroid.compute(LineString(points))`. Empty input
-/// returns [`EmptyGeometry`](#CentroidError).
+/// Equivalent to `centroid.compute(MultiPoint(points))` — wraps the
+/// list in the variant that matches a bag-of-points semantically (no
+/// edge or ordering implied). Empty input returns
+/// [`EmptyGeometry`](#CentroidError).
 pub fn of_points(points points: List(LatLng)) -> Result(LatLng, CentroidError) {
-  compute(geometry: LineString(points))
+  compute(geometry: MultiPoint(points))
 }
 
 /// Compute the centroid of `geometry`.
 pub fn compute(geometry geometry: Geometry) -> Result(LatLng, CentroidError) {
   case geometry {
     Point(p) -> Ok(p)
+    MultiPoint(points) -> mean_of_points(points: points)
     LineString(points) -> mean_of_points(points: points)
     Polygon(rings) -> polygon_centroid(rings: rings)
     MultiPolygon(polygons) -> multipolygon_centroid(polygons: polygons)

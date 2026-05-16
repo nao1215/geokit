@@ -21,6 +21,11 @@ import geokit/latlng.{type LatLng}
 pub type Geometry {
   /// A single point.
   Point(point: LatLng)
+  /// A non-connected collection of points (geotagged events, IoT
+  /// readings, customer pins, ...). Mirrors GeoJSON `MultiPoint`
+  /// (RFC 7946 §3.1.3). Use this when the list has no edge / ordering
+  /// semantics; reach for `LineString` when the points form a path.
+  MultiPoint(points: List(LatLng))
   /// A connected sequence of segments. The list should have at least
   /// two points for the geometry to be meaningful, but the type does
   /// not enforce this.
