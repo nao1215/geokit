@@ -7,6 +7,10 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+### Fixed
+
+- `geokit/mercator`: `mercator.from_quadkey("")` now decodes to the zoom-0 root tile `Tile(zoom: 0, x: 0, y: 0)` instead of returning `Error(EmptyQuadkey)`. At zoom 0 the whole world is one tile whose canonical Bing-Maps quadkey is the empty string (per the Microsoft Bing Maps Tile System spec), and `mercator.to_quadkey` already emits `""` for it — without this fix the `to_quadkey → from_quadkey` round-trip broke at zoom 0. The `EmptyQuadkey` variant of `MercatorError` is retained for backwards compatibility (no function in this module emits it any more) so callers' pattern matches still compile. (#20)
+
 ## [0.3.0] - 2026-05-16
 
 ### Added

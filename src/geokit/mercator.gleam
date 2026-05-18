@@ -37,8 +37,10 @@ pub type MercatorError {
   TileCoordOutOfRange(zoom: Int, x: Int, y: Int)
   /// A character outside `{0, 1, 2, 3}` appeared in a quadkey.
   InvalidQuadkeyChar(char: String, position: Int)
-  /// [`quadkey_to_tile`](#quadkey_to_tile) was called with an empty
-  /// string.
+  /// No longer emitted by any function in this module — `from_quadkey`
+  /// now treats `""` as the zoom-0 root tile per the Bing Maps spec.
+  /// Retained for backwards compatibility with pattern-matching
+  /// callers; safe to remove from `case` arms.
   EmptyQuadkey
 }
 
@@ -166,10 +168,14 @@ fn to_quadkey_loop(tile tile: Tile, level level: Int, acc acc: String) -> String
 }
 
 /// Decode a quadkey to a [`Tile`](#Tile). The resulting `zoom` equals
-/// the length of the quadkey, which must be in `[1, 30]` to mirror
-/// the range accepted by [`new`](#new).
+/// the length of the quadkey, which must be in `[0, 30]`. The empty
+/// string maps to the zoom-0 root tile `Tile(zoom: 0, x: 0, y: 0)`
+/// per the Bing Maps Tile System (the whole world is one tile at
+/// zoom 0; its canonical quadkey is `""`), so `from_quadkey
+/// (to_quadkey(t))` round-trips for every valid `t` including
+/// zoom 0.
 pub fn from_quadkey(quadkey quadkey: String) -> Result(Tile, MercatorError) {
-  use <- bool.guard(when: quadkey == "", return: Error(EmptyQuadkey))
+  use <- bool.guard(when: quadkey == "", return: Ok(Tile(zoom: 0, x: 0, y: 0)))
   let length = string.length(quadkey)
   use <- bool.guard(
     when: length > 30,
