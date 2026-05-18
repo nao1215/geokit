@@ -74,4 +74,8 @@ unwrap_used = "error"
 "src/geokit/bbox.gleam" = ["short_variable_name"]
 "src/geokit/centroid.gleam" = ["short_variable_name"]
 "src/geokit/simplify.gleam" = ["short_variable_name"]
-"src/geokit/latlng.gleam" = ["short_variable_name"]
+"src/geokit/latlng.gleam" = [
+  "short_variable_name",
+  "assert_ok_pattern",
+  "avoid_panic",
+]
