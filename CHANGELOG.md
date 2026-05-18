@@ -7,6 +7,8 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-18
+
 ### Added
 
 - `geokit/latlng`: `latlng.new_or_panic(lat, lng)` — panicking constructor for compile-time-known coordinates (curated city lists, landmark fixtures, hand-coded routes) where wrapping every literal in `let assert Ok(...)` is noise rather than safety. Panics with the offending value when latitude is outside `[-90, 90]` or longitude is outside `[-180, 180]`. The companion `latlng.new` (returns `Result`) remains the right call for runtime input (user-typed, parsed-from-file, network-supplied) where the rejection must be handled. (#19)
