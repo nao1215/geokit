@@ -139,11 +139,33 @@ pub fn quadkey_invalid_char_test() -> Nil {
   }
 }
 
-pub fn quadkey_empty_test() -> Nil {
-  case mercator.from_quadkey(quadkey: "") {
-    Error(mercator.EmptyQuadkey) -> Nil
-    _ -> should.be_true(False)
-  }
+// Issue #20: from_quadkey("") used to error with EmptyQuadkey,
+// breaking the to_quadkey -> from_quadkey round-trip at zoom 0
+// (where the whole world is one tile whose canonical Bing Maps
+// quadkey is "").
+pub fn quadkey_empty_decodes_to_zoom_zero_root_test() -> Nil {
+  let assert Ok(t) = mercator.from_quadkey(quadkey: "")
+  mercator.zoom(t)
+  |> should.equal(0)
+  mercator.x(t)
+  |> should.equal(0)
+  mercator.y(t)
+  |> should.equal(0)
+}
+
+pub fn quadkey_zoom_zero_round_trip_test() -> Nil {
+  let assert Ok(ll) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(tile) = mercator.from_lat_lng(point: ll, zoom: 0)
+  let qk = mercator.to_quadkey(tile: tile)
+  qk
+  |> should.equal("")
+  let assert Ok(decoded) = mercator.from_quadkey(quadkey: qk)
+  mercator.zoom(decoded)
+  |> should.equal(0)
+  mercator.x(decoded)
+  |> should.equal(0)
+  mercator.y(decoded)
+  |> should.equal(0)
 }
 
 pub fn quadkey_too_long_31_chars_rejected_test() -> Nil {
