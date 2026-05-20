@@ -124,3 +124,52 @@ pub fn centroid_compute_multi_point_empty_test() -> Nil {
     _ -> should.be_true(False)
   }
 }
+
+pub fn of_points_closed_ring_unit_square_returns_true_centroid_test() -> Nil {
+  // GeoJSON-shaped closed ring (5 points, last duplicates first).
+  // Pre-#26, the trailing (0, 0) was double-counted and the mean
+  // came out at (0.4, 0.4). With closing-duplicate dedupe the
+  // function now returns the unit square's true mean (0.5, 0.5).
+  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(b) = latlng.new(lat: 0.0, lng: 1.0)
+  let assert Ok(c) = latlng.new(lat: 1.0, lng: 1.0)
+  let assert Ok(d) = latlng.new(lat: 1.0, lng: 0.0)
+  let assert Ok(e) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(centre) = centroid.of_points(points: [a, b, c, d, e])
+  latlng.lat(centre) |> should.equal(0.5)
+  latlng.lng(centre) |> should.equal(0.5)
+}
+
+pub fn of_points_unclosed_ring_uses_arithmetic_mean_test() -> Nil {
+  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(b) = latlng.new(lat: 0.0, lng: 1.0)
+  let assert Ok(c) = latlng.new(lat: 1.0, lng: 1.0)
+  let assert Ok(d) = latlng.new(lat: 1.0, lng: 0.0)
+  let assert Ok(centre) = centroid.of_points(points: [a, b, c, d])
+  latlng.lat(centre) |> should.equal(0.5)
+  latlng.lng(centre) |> should.equal(0.5)
+}
+
+pub fn of_points_interior_adjacent_duplicates_are_kept_test() -> Nil {
+  // Only the closing duplicate (last == first) is dropped. An
+  // interior repeat is left alone because it may carry weight that
+  // the caller intends.
+  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(b) = latlng.new(lat: 1.0, lng: 1.0)
+  let assert Ok(centre) = centroid.of_points(points: [a, a, b])
+  latlng.lng(centre) |> should.equal({ 0.0 +. 0.0 +. 1.0 } /. 3.0)
+}
+
+pub fn of_points_single_point_test() -> Nil {
+  let assert Ok(only) = latlng.new(lat: 5.0, lng: 10.0)
+  let assert Ok(centre) = centroid.of_points(points: [only])
+  latlng.lat(centre) |> should.equal(5.0)
+  latlng.lng(centre) |> should.equal(10.0)
+}
+
+pub fn of_points_empty_errors_test() -> Nil {
+  case centroid.of_points(points: []) {
+    Error(centroid.EmptyGeometry) -> Nil
+    _ -> should.be_true(False)
+  }
+}
