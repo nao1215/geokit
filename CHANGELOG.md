@@ -7,6 +7,10 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+### Fixed
+
+- `geokit/geojson`: `geojson.decode_geometry` now rejects empty Polygons and malformed linear rings instead of producing `Ok(Polygon([]))` / `Ok(Polygon([[]]))`. Per RFC 7946 §3.1.6 a Polygon's `coordinates` must contain at least one linear ring, each linear ring must have at least four positions, and its first position must equal its last. Violations now surface as `Error(InvalidPolygon(reason: String))` — a new `GeoJsonError` variant — with the specific rule named. `MultiPolygon` sub-polygons receive the same validation. The previous one-position-ring case (which already returned `InvalidStructure`) now also routes through `InvalidPolygon` for symmetry. (#24)
+
 ## [0.4.0] - 2026-05-18
 
 ### Added

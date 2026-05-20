@@ -50,6 +50,12 @@ pub type GeoJsonError {
   /// A coordinate pair was structurally valid but the values fell
   /// outside the documented domain of `latlng.new`.
   InvalidLatLng(error: latlng.LatLngError)
+  /// A Polygon (or `MultiPolygon` sub-polygon) failed an RFC 7946
+  /// §3.1.6 invariant. The accompanying `reason` names the specific
+  /// violation: a Polygon with no rings, a ring with fewer than four
+  /// positions, or a ring whose first position is not equal to its
+  /// last.
+  InvalidPolygon(reason: String)
 }
 
 /// A GeoJSON `id` value. RFC 7946 §3.2 allows either a JSON string
@@ -305,7 +311,70 @@ fn raw_multi_polygon_to_geometry(
 fn parse_rings(
   raw: List(List(List(Float))),
 ) -> Result(List(List(LatLng)), GeoJsonError) {
-  list.try_map(raw, fn(ring) { list.try_map(ring, parse_position) })
+  use _ <- result.try(check_polygon_has_ring(raw))
+  use rings <- result.try(
+    list.try_map(raw, fn(ring) { list.try_map(ring, parse_position) }),
+  )
+  use _ <- result.map(check_all_rings(rings))
+  rings
+}
+
+fn check_all_rings(rings: List(List(LatLng))) -> Result(Nil, GeoJsonError) {
+  case rings {
+    [] -> Ok(Nil)
+    [head, ..rest] ->
+      case check_linear_ring(head) {
+        Ok(Nil) -> check_all_rings(rest)
+        Error(e) -> Error(e)
+      }
+  }
+}
+
+fn check_polygon_has_ring(
+  raw: List(List(List(Float))),
+) -> Result(Nil, GeoJsonError) {
+  case raw {
+    [] ->
+      Error(InvalidPolygon(
+        reason: "Polygon must contain at least one linear ring (RFC 7946 §3.1.6)",
+      ))
+    _ -> Ok(Nil)
+  }
+}
+
+fn check_linear_ring(ring: List(LatLng)) -> Result(Nil, GeoJsonError) {
+  case ring {
+    [first, _, _, _, ..] ->
+      case last_in_list(ring) {
+        Ok(last) ->
+          case
+            latlng.lat(first) == latlng.lat(last)
+            && latlng.lng(first) == latlng.lng(last)
+          {
+            True -> Ok(Nil)
+            False ->
+              Error(InvalidPolygon(
+                reason: "linear ring must be closed: first position must equal last (RFC 7946 §3.1.6)",
+              ))
+          }
+        Error(Nil) ->
+          Error(InvalidPolygon(
+            reason: "linear ring must have at least four positions (RFC 7946 §3.1.6)",
+          ))
+      }
+    _ ->
+      Error(InvalidPolygon(
+        reason: "linear ring must have at least four positions (RFC 7946 §3.1.6)",
+      ))
+  }
+}
+
+fn last_in_list(items: List(a)) -> Result(a, Nil) {
+  case items {
+    [] -> Error(Nil)
+    [only] -> Ok(only)
+    [_, ..rest] -> last_in_list(rest)
+  }
 }
 
 fn parse_position(coords: List(Float)) -> Result(LatLng, GeoJsonError) {
