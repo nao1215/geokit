@@ -7,6 +7,8 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-20
+
 ### Changed
 
 - `geokit/centroid`: `centroid.of_points` now drops the trailing duplicate when the input is a closed ring of three or more vertices (first vertex equal to last — the shape GeoJSON Polygon linear rings carry per RFC 7946 §3.1.6). The unit-square closed ring `[(0,0), (0,1), (1,1), (1,0), (0,0)]` now returns `(0.5, 0.5)` instead of the closing-duplicate-biased `(0.4, 0.4)`. Two-element rings where both vertices are equal are left alone (their mean is already that point). Interior adjacent duplicates are preserved — they may be deliberate. For the geometric (signed-area) centroid, use `centroid.compute(Polygon(...))`. (#26)
