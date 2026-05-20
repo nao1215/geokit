@@ -25,6 +25,7 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/string
 
 import geokit/geometry.{type Geometry}
 import geokit/latlng.{type LatLng}
@@ -229,9 +230,31 @@ fn json_error_to_geojson(err: json.DecodeError) -> GeoJsonError {
     json.UnexpectedEndOfInput -> InvalidJson("unexpected end of input")
     json.UnexpectedByte(byte) -> InvalidJson("unexpected byte: " <> byte)
     json.UnexpectedSequence(seq) -> InvalidJson("unexpected sequence: " <> seq)
-    json.UnableToDecode(_) ->
-      InvalidStructure("JSON shape did not match expected GeoJSON")
+    json.UnableToDecode(errors) ->
+      InvalidStructure(decode_errors_to_reason(errors))
   }
+}
+
+/// Project a `decode.DecodeError` list into a single, human-actionable
+/// reason string. The previous implementation collapsed every shape
+/// mismatch into the opaque `"JSON shape did not match expected
+/// GeoJSON"` regardless of the underlying cause. Now the reason
+/// names the failing path, the expected type, and the value that
+/// was actually found so a caller routing on the reason string can
+/// triage a 400 response without re-parsing the JSON.
+fn decode_errors_to_reason(errors: List(decode.DecodeError)) -> String {
+  case errors {
+    [] -> "JSON shape did not match expected GeoJSON"
+    [first, ..] -> decode_error_to_reason(first)
+  }
+}
+
+fn decode_error_to_reason(err: decode.DecodeError) -> String {
+  let path = case err.path {
+    [] -> "<root>"
+    _ -> string.join(err.path, ".")
+  }
+  "at " <> path <> ": expected " <> err.expected <> ", got " <> err.found
 }
 
 fn geometry_decoder() -> Decoder(Result(Geometry, GeoJsonError)) {
