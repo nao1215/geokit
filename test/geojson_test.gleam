@@ -173,6 +173,39 @@ pub fn decode_multi_polygon_with_invalid_sub_polygon_is_rejected_test() -> Nil {
   }
 }
 
+pub fn decode_missing_coordinates_reports_path_test() -> Nil {
+  // Previously surfaced as the opaque "JSON shape did not match
+  // expected GeoJSON"; the reason now names the failing field path
+  // and the decoder's expected/found pair so a caller can return
+  // a useful 400.
+  case geojson.decode_geometry(input: "{\"type\":\"Point\"}") {
+    Error(geojson.InvalidStructure(reason: reason)) -> {
+      string.contains(reason, "coordinates") |> should.be_true
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn decode_non_numeric_coordinates_reports_path_test() -> Nil {
+  let input = "{\"type\":\"Point\",\"coordinates\":[\"a\",\"b\"]}"
+  case geojson.decode_geometry(input: input) {
+    Error(geojson.InvalidStructure(reason: reason)) -> {
+      string.contains(reason, "Float") |> should.be_true
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn decode_null_coordinates_reports_path_test() -> Nil {
+  let input = "{\"type\":\"Point\",\"coordinates\":[null,null]}"
+  case geojson.decode_geometry(input: input) {
+    Error(geojson.InvalidStructure(reason: reason)) -> {
+      string.contains(reason, "Float") |> should.be_true
+    }
+    _ -> should.fail()
+  }
+}
+
 // --- altitude (3rd coordinate) is accepted and discarded ----------------
 
 pub fn decode_point_with_altitude_test() -> Nil {

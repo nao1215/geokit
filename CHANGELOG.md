@@ -7,6 +7,10 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+### Changed
+
+- `geokit/geojson`: `InvalidStructure(reason: String)` now carries an actionable reason string instead of the opaque `"JSON shape did not match expected GeoJSON"` for every JSON-decoder failure. The new reason names the failing field path (e.g. `"at coordinates"`) and quotes the expected/found pair the underlying decoder reported (e.g. `"expected List(Float), got Nil"`), so a caller routing to a 400 response can attach the failing position without re-parsing the input. Inputs whose root cause is one of the existing specific variants (`InvalidPosition`, `InvalidLatLng`, `InvalidPolygon`, `UnknownType`) still surface those variants instead. (#25)
+
 ### Fixed
 
 - `geokit/geojson`: `geojson.decode_geometry` now rejects empty Polygons and malformed linear rings instead of producing `Ok(Polygon([]))` / `Ok(Polygon([[]]))`. Per RFC 7946 §3.1.6 a Polygon's `coordinates` must contain at least one linear ring, each linear ring must have at least four positions, and its first position must equal its last. Violations now surface as `Error(InvalidPolygon(reason: String))` — a new `GeoJsonError` variant — with the specific rule named. `MultiPolygon` sub-polygons receive the same validation. The previous one-position-ring case (which already returned `InvalidStructure`) now also routes through `InvalidPolygon` for symmetry. (#24)
