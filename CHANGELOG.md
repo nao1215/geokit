@@ -9,6 +9,7 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ### Changed
 
+- `geokit/centroid`: `centroid.of_points` now drops the trailing duplicate when the input is a closed ring of three or more vertices (first vertex equal to last — the shape GeoJSON Polygon linear rings carry per RFC 7946 §3.1.6). The unit-square closed ring `[(0,0), (0,1), (1,1), (1,0), (0,0)]` now returns `(0.5, 0.5)` instead of the closing-duplicate-biased `(0.4, 0.4)`. Two-element rings where both vertices are equal are left alone (their mean is already that point). Interior adjacent duplicates are preserved — they may be deliberate. For the geometric (signed-area) centroid, use `centroid.compute(Polygon(...))`. (#26)
 - `geokit/geojson`: `InvalidStructure(reason: String)` now carries an actionable reason string instead of the opaque `"JSON shape did not match expected GeoJSON"` for every JSON-decoder failure. The new reason names the failing field path (e.g. `"at coordinates"`) and quotes the expected/found pair the underlying decoder reported (e.g. `"expected List(Float), got Nil"`), so a caller routing to a 400 response can attach the failing position without re-parsing the input. Inputs whose root cause is one of the existing specific variants (`InvalidPosition`, `InvalidLatLng`, `InvalidPolygon`, `UnknownType`) still surface those variants instead. (#25)
 
 ### Fixed

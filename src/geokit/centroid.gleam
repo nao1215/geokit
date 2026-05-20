@@ -51,8 +51,58 @@ pub type CentroidError {
 /// list in the variant that matches a bag-of-points semantically (no
 /// edge or ordering implied). Empty input returns
 /// [`EmptyGeometry`](#CentroidError).
+///
+/// When the input is a closed ring (first vertex equal to last —
+/// the shape GeoJSON Polygon linear rings carry per RFC 7946
+/// §3.1.6), the trailing duplicate is dropped before the mean so
+/// the closing vertex is not double-counted. Two-element rings
+/// where both vertices are equal are left alone (their mean is
+/// already that point). Interior adjacent duplicates are
+/// **preserved** — they may be deliberate.
+///
+/// For the geometric (signed-area) centroid of a Polygon, use
+/// `centroid.compute(Polygon(...))`.
 pub fn of_points(points points: List(LatLng)) -> Result(LatLng, CentroidError) {
-  compute(geometry: MultiPoint(points))
+  compute(geometry: MultiPoint(drop_closing_duplicate(points)))
+}
+
+/// Drop the last vertex when the input is a closed ring of three or
+/// more vertices (first == last). Empty lists, single-vertex lists,
+/// and two-vertex lists pass through unchanged.
+fn drop_closing_duplicate(points: List(LatLng)) -> List(LatLng) {
+  case points {
+    [] -> points
+    [_] -> points
+    [_, _] -> points
+    [first, ..] ->
+      case last_in_list(points) {
+        Ok(last) ->
+          case
+            latlng.lat(first) == latlng.lat(last)
+            && latlng.lng(first) == latlng.lng(last)
+          {
+            True -> drop_last(points)
+            False -> points
+          }
+        Error(Nil) -> points
+      }
+  }
+}
+
+fn last_in_list(items: List(LatLng)) -> Result(LatLng, Nil) {
+  case items {
+    [] -> Error(Nil)
+    [only] -> Ok(only)
+    [_, ..rest] -> last_in_list(rest)
+  }
+}
+
+fn drop_last(items: List(LatLng)) -> List(LatLng) {
+  case items {
+    [] -> []
+    [_] -> []
+    [head, ..tail] -> [head, ..drop_last(tail)]
+  }
 }
 
 /// Compute the centroid of `geometry`.
