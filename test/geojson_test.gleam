@@ -127,6 +127,52 @@ pub fn decode_multi_polygon_test() -> Nil {
   |> should.equal([[[p(0.0, 0.0), p(0.0, 1.0), p(1.0, 1.0), p(0.0, 0.0)]]])
 }
 
+pub fn decode_polygon_with_no_rings_is_rejected_test() -> Nil {
+  let result =
+    geojson.decode_geometry(input: "{\"type\":\"Polygon\",\"coordinates\":[]}")
+  case result {
+    Error(geojson.InvalidPolygon(reason: _)) -> Nil
+    _ -> should.fail()
+  }
+}
+
+pub fn decode_polygon_with_empty_ring_is_rejected_test() -> Nil {
+  let result =
+    geojson.decode_geometry(
+      input: "{\"type\":\"Polygon\",\"coordinates\":[[]]}",
+    )
+  case result {
+    Error(geojson.InvalidPolygon(reason: _)) -> Nil
+    _ -> should.fail()
+  }
+}
+
+pub fn decode_polygon_with_three_position_ring_is_rejected_test() -> Nil {
+  let input =
+    "{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,0.0],[0.0,0.0]]]}"
+  case geojson.decode_geometry(input: input) {
+    Error(geojson.InvalidPolygon(reason: _)) -> Nil
+    _ -> should.fail()
+  }
+}
+
+pub fn decode_polygon_with_unclosed_ring_is_rejected_test() -> Nil {
+  let input =
+    "{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[0.5,0.5]]]}"
+  case geojson.decode_geometry(input: input) {
+    Error(geojson.InvalidPolygon(reason: _)) -> Nil
+    _ -> should.fail()
+  }
+}
+
+pub fn decode_multi_polygon_with_invalid_sub_polygon_is_rejected_test() -> Nil {
+  let input = "{\"type\":\"MultiPolygon\",\"coordinates\":[[[]]]}"
+  case geojson.decode_geometry(input: input) {
+    Error(geojson.InvalidPolygon(reason: _)) -> Nil
+    _ -> should.fail()
+  }
+}
+
 // --- altitude (3rd coordinate) is accepted and discarded ----------------
 
 pub fn decode_point_with_altitude_test() -> Nil {
