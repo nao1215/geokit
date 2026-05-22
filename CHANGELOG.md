@@ -7,6 +7,8 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-22
+
 ### Fixed
 
 - `geokit/geohash`: `geohash.encode` now follows the canonical Wikipedia / `ngeohash` / `pygeohash` / `geohash.org` convention at recursive bisection midpoints — `coordinate >= midpoint` places the bit in the upper half. The previous strict `>` produced different cells from every other geohash implementation for midpoint inputs (the equator, the poles, the prime / anti meridian), silently breaking interop: a hash emitted by geokit for `(0, 0)` decoded in `pygeohash` / `ngeohash` / a JS map widget pointed at a different cell on the opposite side of the equator. Non-midpoint inputs are unaffected. **Breaking** for callers that stored geokit-0.5.x hashes for midpoint inputs — re-encode such hashes before upgrading if exact byte-equality matters. The encode docstring now spells out the convention explicitly. (#31)
