@@ -23,14 +23,16 @@ pub fn encode_wikipedia_test() -> Nil {
 }
 
 pub fn encode_origin_test() -> Nil {
-  // (0, 0) at precision 5 → "7zzzz" (matches ngeohash). The
-  // commonly-cited "s0000" is wrong; it would require non-strict
-  // greater-than comparison at the midpoint, which differs from the
-  // standard geohash algorithm.
+  // Issue #31: (0, 0) at precision 5 → "s0000". The equator and prime
+  // meridian sit exactly on the recursive bisection midpoint, and the
+  // canonical Wikipedia / `ngeohash` / `pygeohash` / `geohash.org`
+  // convention uses `>=` at the midpoint so the bit goes to the upper
+  // half. The previous output "7zzzz" came from a strict `>` and
+  // disagreed with every other implementation.
   let assert Ok(origin) = latlng.new(lat: 0.0, lng: 0.0)
   let assert Ok(hash) = geohash.encode(point: origin, precision: 5)
   hash
-  |> should.equal("7zzzz")
+  |> should.equal("s0000")
 }
 
 pub fn encode_high_precision_test() -> Nil {
@@ -184,10 +186,14 @@ pub fn neighbor_decode_north_is_north_of_centre_test() -> Nil {
 }
 
 pub fn encode_at_35_135_matches_ngeohash_test() -> Nil {
+  // Issue #31: lng = 135 lands exactly on the third bisection
+  // midpoint ([90, 180] → mid 135), so the canonical `>=` convention
+  // picks a different bit than the previous strict `>`. The test
+  // value below is the post-fix output, which matches ngeohash.
   let assert Ok(point) = latlng.new(lat: 35.0, lng: 135.0)
   let assert Ok(hash) = geohash.encode(point: point, precision: 6)
   hash
-  |> should.equal("wypzpg")
+  |> should.equal("xn0p05")
 }
 
 pub fn neighbors_around_test() -> Nil {

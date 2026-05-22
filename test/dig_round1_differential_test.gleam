@@ -240,27 +240,33 @@ pub fn diff_geohash_encode_osaka_p5_test() -> Nil {
 }
 
 pub fn diff_geohash_encode_equator_p5_test() -> Nil {
+  // Issue #31: canonical Wikipedia / ngeohash / pygeohash / geohash.org
+  // value for the origin is "s0000". The previous "7zzzz" was the
+  // pre-fix output from a strict `>` midpoint comparison.
   let assert Ok(p) = latlng.new(lat: 0.0, lng: 0.0)
   let assert Ok(hash) = geohash.encode(point: p, precision: 5)
-  hash |> should.equal("7zzzz")
+  hash |> should.equal("s0000")
 }
 
 pub fn diff_geohash_encode_antimeridian_p5_test() -> Nil {
+  // Issue #31: ngeohash output for (0, 180) is "xbpbp".
   let assert Ok(p) = latlng.new(lat: 0.0, lng: 180.0)
   let assert Ok(hash) = geohash.encode(point: p, precision: 5)
-  hash |> should.equal("rzzzz")
+  hash |> should.equal("xbpbp")
 }
 
 pub fn diff_geohash_encode_north_pole_p5_test() -> Nil {
+  // Issue #31: ngeohash output for (90, 0) is "upbpb".
   let assert Ok(p) = latlng.new(lat: 90.0, lng: 0.0)
   let assert Ok(hash) = geohash.encode(point: p, precision: 5)
-  hash |> should.equal("gzzzz")
+  hash |> should.equal("upbpb")
 }
 
 pub fn diff_geohash_encode_south_pole_p5_test() -> Nil {
+  // Issue #31: ngeohash output for (-90, 0) is "h0000".
   let assert Ok(p) = latlng.new(lat: -90.0, lng: 0.0)
   let assert Ok(hash) = geohash.encode(point: p, precision: 5)
-  hash |> should.equal("5bpbp")
+  hash |> should.equal("h0000")
 }
 
 pub fn diff_geohash_encode_p1_tokyo_test() -> Nil {

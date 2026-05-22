@@ -64,6 +64,13 @@ pub type Neighbors {
 /// characters and must be in `[1, 12]`. Each additional character
 /// shrinks the cell width by a factor of ~5.6.
 ///
+/// Midpoint inputs (the equator, the poles, the prime / anti
+/// meridian, and other coordinates that land exactly on a recursive
+/// bisection midpoint) follow the canonical Wikipedia / `ngeohash` /
+/// `pygeohash` / `geohash.org` convention: `coordinate >= midpoint`
+/// places the bit in the upper half. This makes geokit-emitted
+/// hashes byte-compatible with every other geohash implementation.
+///
 /// ```gleam
 /// import geokit/geohash
 /// import geokit/latlng
@@ -111,7 +118,7 @@ fn encode_bits(
   case use_lng {
     True -> {
       let mid = { lng_min +. lng_max } /. 2.0
-      let go_high = lng >. mid
+      let go_high = lng >=. mid
       let new_min = case go_high {
         True -> mid
         False -> lng_min
@@ -138,7 +145,7 @@ fn encode_bits(
     }
     False -> {
       let mid = { lat_min +. lat_max } /. 2.0
-      let go_high = lat >. mid
+      let go_high = lat >=. mid
       let new_min = case go_high {
         True -> mid
         False -> lat_min
