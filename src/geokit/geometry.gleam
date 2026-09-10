@@ -1,6 +1,7 @@
 //// Geometry types shared by [`geokit/bbox`](./bbox.html),
-//// [`geokit/centroid`](./centroid.html), and
-//// [`geokit/simplify`](./simplify.html).
+//// [`geokit/centroid`](./centroid.html),
+//// [`geokit/simplify`](./simplify.html), and
+//// [`geokit/point_in_polygon`](./point_in_polygon.html).
 ////
 //// The ADT mirrors RFC 7946 GeoJSON (`Point`, `LineString`,
 //// `Polygon`, `MultiPolygon`) but only carries geometric data — no

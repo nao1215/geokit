@@ -20,6 +20,7 @@ import geokit/geojson
 import geokit/geometry
 import geokit/latlng
 import geokit/mercator
+import geokit/point_in_polygon
 import geokit/polyline
 import geokit/simplify
 
@@ -242,4 +243,44 @@ pub fn readme_polygon_ops_test() -> Nil {
   // Douglas-Peucker on a square at very small tolerance keeps every
   // corner (no two points are collinear within 0.001°).
   list.length(reduced) |> should.equal(4)
+}
+
+// --- point in polygon --------------------------------------------------
+
+pub fn park_and_lake() {
+  let park = [
+    latlng.new_or_panic(lat: 0.0, lng: 0.0),
+    latlng.new_or_panic(lat: 0.0, lng: 10.0),
+    latlng.new_or_panic(lat: 10.0, lng: 10.0),
+    latlng.new_or_panic(lat: 10.0, lng: 0.0),
+    latlng.new_or_panic(lat: 0.0, lng: 0.0),
+  ]
+  let lake = [
+    latlng.new_or_panic(lat: 4.0, lng: 4.0),
+    latlng.new_or_panic(lat: 4.0, lng: 6.0),
+    latlng.new_or_panic(lat: 6.0, lng: 6.0),
+    latlng.new_or_panic(lat: 6.0, lng: 4.0),
+    latlng.new_or_panic(lat: 4.0, lng: 4.0),
+  ]
+  let polygon = geometry.Polygon([park, lake])
+
+  let bench = latlng.new_or_panic(lat: 2.0, lng: 2.0)
+  let boat = latlng.new_or_panic(lat: 5.0, lng: 5.0)
+  let gate = latlng.new_or_panic(lat: 0.0, lng: 5.0)
+  #(
+    point_in_polygon.contains(geometry: polygon, point: bench),
+    point_in_polygon.contains(geometry: polygon, point: boat),
+    point_in_polygon.contains(geometry: polygon, point: gate),
+    point_in_polygon.locate(geometry: polygon, point: gate),
+  )
+}
+
+pub fn readme_park_and_lake_test() -> Nil {
+  park_and_lake()
+  |> should.equal(#(
+    Ok(True),
+    Ok(False),
+    Ok(True),
+    Ok(point_in_polygon.OnBoundary),
+  ))
 }
