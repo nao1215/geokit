@@ -28,5 +28,6 @@
 /// The package version string. Useful for runtime diagnostics and
 /// version reporting in dependent applications.
 pub fn version() -> String {
-  "0.2.0"
+  // Keep in sync with `version` in gleam.toml when cutting a release.
+  "0.7.0"
 }

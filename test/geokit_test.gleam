@@ -6,7 +6,8 @@ pub fn main() -> Nil {
   gleeunit.main()
 }
 
-pub fn version_is_set_test() -> Nil {
+pub fn version_matches_gleam_toml_test() -> Nil {
+  // Must equal `version` in gleam.toml; the release checklist updates both.
   geokit.version()
-  |> should.equal("0.2.0")
+  |> should.equal("0.7.0")
 }
