@@ -116,7 +116,9 @@ pub fn compute(geometry geometry: Geometry) -> Result(LatLng, CentroidError) {
   }
 }
 
-fn mean_of_points(points points: List(LatLng)) -> Result(LatLng, CentroidError) {
+fn mean_of_points(
+  points points: List(LatLng),
+) -> Result(LatLng, CentroidError) {
   use <- bool.guard(when: list.is_empty(points), return: Error(EmptyGeometry))
   let #(sum_lat, sum_lng, count) =
     sum_points(points: points, sum_lat: 0.0, sum_lng: 0.0, count: 0)

@@ -152,7 +152,11 @@ pub fn to_quadkey(tile tile: Tile) -> String {
   to_quadkey_loop(tile: tile, level: tile.zoom, acc: "")
 }
 
-fn to_quadkey_loop(tile tile: Tile, level level: Int, acc acc: String) -> String {
+fn to_quadkey_loop(
+  tile tile: Tile,
+  level level: Int,
+  acc acc: String,
+) -> String {
   use <- bool.guard(when: level <= 0, return: acc)
   let mask = pow_2(level - 1)
   let bit_x = tile.x / mask % 2

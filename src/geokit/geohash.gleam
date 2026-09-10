@@ -509,7 +509,10 @@ fn neighbor_table(
   }
 }
 
-fn border_table(direction direction: Direction, is_even is_even: Bool) -> String {
+fn border_table(
+  direction direction: Direction,
+  is_even is_even: Bool,
+) -> String {
   case direction, is_even {
     North, True -> border_n_even
     North, False -> border_n_odd
