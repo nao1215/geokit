@@ -191,6 +191,47 @@ pub fn polygon_ops() {
 }
 ```
 
+Point in polygon, with a hole (Turf's `booleanPointInPolygon`):
+
+```gleam
+import geokit/geometry
+import geokit/latlng
+import geokit/point_in_polygon
+
+pub fn park_and_lake() {
+  let park = [
+    latlng.new_or_panic(lat: 0.0, lng: 0.0),
+    latlng.new_or_panic(lat: 0.0, lng: 10.0),
+    latlng.new_or_panic(lat: 10.0, lng: 10.0),
+    latlng.new_or_panic(lat: 10.0, lng: 0.0),
+    latlng.new_or_panic(lat: 0.0, lng: 0.0),
+  ]
+  let lake = [
+    latlng.new_or_panic(lat: 4.0, lng: 4.0),
+    latlng.new_or_panic(lat: 4.0, lng: 6.0),
+    latlng.new_or_panic(lat: 6.0, lng: 6.0),
+    latlng.new_or_panic(lat: 6.0, lng: 4.0),
+    latlng.new_or_panic(lat: 4.0, lng: 4.0),
+  ]
+  // The first ring is the exterior; the others are holes.
+  let polygon = geometry.Polygon([park, lake])
+
+  let bench = latlng.new_or_panic(lat: 2.0, lng: 2.0)
+  let boat = latlng.new_or_panic(lat: 5.0, lng: 5.0)
+  let gate = latlng.new_or_panic(lat: 0.0, lng: 5.0)
+  #(
+    point_in_polygon.contains(geometry: polygon, point: bench),
+    // == Ok(True)
+    point_in_polygon.contains(geometry: polygon, point: boat),
+    // == Ok(False), the boat is in the hole
+    point_in_polygon.contains(geometry: polygon, point: gate),
+    // == Ok(True), the boundary counts as inside
+    point_in_polygon.locate(geometry: polygon, point: gate),
+    // == Ok(point_in_polygon.OnBoundary)
+  )
+}
+```
+
 Full API reference: <https://hexdocs.pm/geokit/>.
 
 ## Notes
@@ -206,7 +247,9 @@ Full API reference: <https://hexdocs.pm/geokit/>.
 - All polygon and line operations treat the lat/lng plane as flat — no
   projection is applied. For polygons spanning more than a few
   degrees, project to Web Mercator via `geokit/mercator` first.
-- Bounding boxes do not wrap around the antimeridian.
+- Bounding boxes and point-in-polygon tests do not wrap around the
+  antimeridian. Split a shape that crosses it into a `MultiPolygon`
+  at ±180°, as RFC 7946 §3.1.9 recommends.
 
 ## License
 

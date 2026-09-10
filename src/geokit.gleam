@@ -22,6 +22,8 @@
 ////   centroid.
 //// - [`geokit/simplify`](./geokit/simplify.html) — Douglas-Peucker
 ////   line simplification.
+//// - [`geokit/point_in_polygon`](./geokit/point_in_polygon.html) —
+////   whether a point lies inside a polygon.
 
 /// The package version string. Useful for runtime diagnostics and
 /// version reporting in dependent applications.

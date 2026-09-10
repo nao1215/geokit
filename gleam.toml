@@ -1,6 +1,6 @@
 name = "geokit"
 version = "0.6.0"
-description = "Spherical-earth math, location encodings, and geometry operations for Gleam: haversine, bearing, geohash, polyline, Web Mercator, bbox / centroid / simplify."
+description = "Spherical-earth math, location encodings, and geometry operations for Gleam: haversine, bearing, geohash, polyline, Web Mercator, bbox / centroid / simplify / point-in-polygon."
 licences = ["MIT"]
 repository = { type = "github", user = "nao1215", repo = "geokit" }
 links = [
