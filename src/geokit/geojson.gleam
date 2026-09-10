@@ -298,7 +298,9 @@ fn geometry_decoder() -> Decoder(Result(Geometry, GeoJsonError)) {
   }
 }
 
-fn raw_point_to_geometry(coords: List(Float)) -> Result(Geometry, GeoJsonError) {
+fn raw_point_to_geometry(
+  coords: List(Float),
+) -> Result(Geometry, GeoJsonError) {
   use point <- result.map(parse_position(coords))
   geometry.Point(point)
 }
