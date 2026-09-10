@@ -7,6 +7,8 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-10
+
 ### Added
 
 - `geokit/point_in_polygon`: new module that tells whether a point lies in a `Polygon` or `MultiPolygon`, like Turf's `booleanPointInPolygon`. `contains` counts the boundary as inside (Turf's default) and `locate` returns `Inside` / `OnBoundary` / `Outside`, so `locate(...) == Ok(Inside)` is Turf's `ignoreBoundary: true`; holes are excluded, rings may be open or closed, the test is planar ray casting on lng/lat without antimeridian wrapping, and other geometries return `Error(NotAPolygon)`.
@@ -14,6 +16,10 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 ### Changed
 
 - The minimum Gleam version is now 1.14.0 (was 1.15.0). 1.14.0 builds and tests the package unchanged on both targets, and `gleam_stdlib` 1.0 already requires it. CI tests that floor alongside the latest Gleam 1.x.
+
+### Fixed
+
+- `geokit.version()` returned `"0.2.0"` in every release since 0.2.0; it now returns the published package version.
 
 ## [0.6.0] - 2026-05-22
 
