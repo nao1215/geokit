@@ -53,7 +53,7 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "27"
+          otp-version: "29.1"
           gleam-version: "1.14.0"
           rebar3-version: "3"
 
