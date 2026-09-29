@@ -5,6 +5,7 @@
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/geokit/)
 [![CI](https://github.com/nao1215/geokit/actions/workflows/ci.yml/badge.svg)](https://github.com/nao1215/geokit/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/nao1215/geokit)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/nao1215/geokit/badge)](https://scorecard.dev/viewer/?uri=github.com/nao1215/geokit)
 
 Spherical-earth math, location encodings, and geometry operations for
 Gleam. Runs on the Erlang and JavaScript targets.
