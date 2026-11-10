@@ -80,14 +80,40 @@ jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
+    # id-token: keyless cosign signing and build provenance via GitHub OIDC.
+    # attestations: publish the GitHub attestation for the package tarball.
+    # contents: create the GitHub Release and upload assets.
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     needs: build
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+
+      # Same toolchain as the publish job: `gleam export hex-tarball` below
+      # builds the same package that is published to Hex.
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          otp-version: "29"
+          gleam-version: "1.x"
+
+      - name: Download dependencies
+        run: gleam deps download
+
+      - name: Build package tarball and checksums
+        id: package
+        run: |
+          set -euo pipefail
+          gleam export hex-tarball
+          tarball=$(basename build/*.tar)
+          cp "build/$tarball" "$tarball"
+          sha256sum "$tarball" > checksums.txt
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          echo "provenance=${tarball%.tar}.intoto.jsonl" >> "$GITHUB_OUTPUT"
 
       - name: Extract tag name
         id: tag
@@ -128,6 +154,27 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Sign checksums (cosign keyless)
+        run: cosign sign-blob --yes --bundle checksums.txt.sigstore.json checksums.txt
+
+      - name: Attest build provenance
+        id: attest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ steps.package.outputs.tarball }}
+
+      # Scorecard's Signed-Releases check looks for a *.intoto.jsonl release
+      # asset. The attestation bundle is a single JSON line, which is the
+      # in-toto/sigstore format that file name stands for.
+      - name: Write provenance release asset
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+          PROVENANCE: ${{ steps.package.outputs.provenance }}
+        run: jq -c . < "$BUNDLE_PATH" > "$PROVENANCE"
+
       - name: Create Release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
@@ -144,6 +191,11 @@ jobs:
 
             See [HexDocs](https://hexdocs.pm/geokit) for the API
             reference.
+          files: |
+            ${{ steps.package.outputs.tarball }}
+            checksums.txt
+            checksums.txt.sigstore.json
+            ${{ steps.package.outputs.provenance }}
           draft: false
           prerelease: ${{ contains(steps.tag.outputs.TAG_NAME, '-alpha') || contains(steps.tag.outputs.TAG_NAME, '-beta') || contains(steps.tag.outputs.TAG_NAME, '-rc') }}
           generate_release_notes: false

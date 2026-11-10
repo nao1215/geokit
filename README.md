@@ -252,6 +252,20 @@ Full API reference: <https://hexdocs.pm/geokit/>.
   antimeridian. Split a shape that crosses it into a `MultiPolygon`
   at ±180°, as RFC 7946 §3.1.9 recommends.
 
+## Verifying releases
+
+Each GitHub Release attaches the package tarball (`geokit-<version>.tar`), `checksums.txt`, a cosign signature bundle for it (`checksums.txt.sigstore.json`) and the build provenance (`geokit-<version>.intoto.jsonl`). Download them from the release page, then verify:
+
+```sh
+gh attestation verify geokit-<version>.tar --repo nao1215/geokit
+
+sha256sum -c checksums.txt
+cosign verify-blob --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/nao1215/geokit/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+```
+
 ## License
 
 [MIT](LICENSE)
