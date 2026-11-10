@@ -254,16 +254,19 @@ Full API reference: <https://hexdocs.pm/geokit/>.
 
 ## Verifying releases
 
-Each GitHub Release attaches the package tarball (`geokit-<version>.tar`), `checksums.txt`, a cosign signature bundle for it (`checksums.txt.sigstore.json`) and the build provenance (`geokit-<version>.intoto.jsonl`). Download them from the release page, then verify:
+Each GitHub Release attaches the Hex package tarball (`geokit-<version>.tar`),
+`checksums.txt`, a cosign signature bundle (`checksums.txt.sigstore.json`) and
+build provenance (`geokit-<version>.intoto.jsonl`). Download the assets, then:
 
 ```sh
 gh attestation verify geokit-<version>.tar --repo nao1215/geokit
 
-sha256sum -c checksums.txt
-cosign verify-blob --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/nao1215/geokit/' \
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github\.com/nao1215/geokit/\.github/workflows/release\.yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   checksums.txt
+sha256sum --check checksums.txt
 ```
 
 ## License
