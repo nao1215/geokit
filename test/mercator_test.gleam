@@ -42,6 +42,24 @@ pub fn tile_coord_out_of_range_test() -> Nil {
   }
 }
 
+pub fn tile_each_coord_bound_is_checked_test() -> Nil {
+  // Each of the four bounds alone must reject the tile.
+  mercator.new(zoom: 2, x: -1, y: 0)
+  |> should.equal(Error(mercator.TileCoordOutOfRange(zoom: 2, x: -1, y: 0)))
+  mercator.new(zoom: 2, x: 0, y: -1)
+  |> should.equal(Error(mercator.TileCoordOutOfRange(zoom: 2, x: 0, y: -1)))
+  mercator.new(zoom: 2, x: 0, y: 4)
+  |> should.equal(Error(mercator.TileCoordOutOfRange(zoom: 2, x: 0, y: 4)))
+}
+
+pub fn from_lat_lng_zoom_out_of_range_test() -> Nil {
+  let assert Ok(origin) = latlng.new(lat: 0.0, lng: 0.0)
+  mercator.from_lat_lng(point: origin, zoom: -1)
+  |> should.equal(Error(mercator.ZoomOutOfRange(zoom: -1)))
+  mercator.from_lat_lng(point: origin, zoom: 31)
+  |> should.equal(Error(mercator.ZoomOutOfRange(zoom: 31)))
+}
+
 // --- LatLng <-> Tile ----------------------------------------------------
 
 pub fn origin_at_zoom_zero_test() -> Nil {

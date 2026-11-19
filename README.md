@@ -263,6 +263,7 @@ Full API reference: <https://hexdocs.pm/geokit/>.
 | Generated properties | [Broken invariants and round trips](doc/testing.md#generated-properties) |
 | Metamorphic relations | [Asymmetric handling of hemispheres, meridians, zoom levels and tolerances](doc/testing.md#metamorphic-relations) |
 | Differential testing | [Disagreement with reference implementations](doc/testing.md#differential-testing) |
+| Mutation testing | [Assertions that miss a changed operator or branch](doc/testing.md#mutation-testing) |
 
 ## Verifying releases
 

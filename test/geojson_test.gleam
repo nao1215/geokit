@@ -165,6 +165,23 @@ pub fn decode_polygon_with_unclosed_ring_is_rejected_test() -> Nil {
   }
 }
 
+pub fn decode_polygon_whose_ring_ends_on_the_same_latitude_is_rejected_test() -> Nil {
+  // The last position shares only the latitude of the first one, or only
+  // the longitude, so the ring is still open.
+  let same_latitude =
+    "{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[2.0,0.0]]]}"
+  let same_longitude =
+    "{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[0.0,2.0]]]}"
+  case geojson.decode_geometry(input: same_latitude) {
+    Error(geojson.InvalidPolygon(reason: _)) -> Nil
+    _ -> should.fail()
+  }
+  case geojson.decode_geometry(input: same_longitude) {
+    Error(geojson.InvalidPolygon(reason: _)) -> Nil
+    _ -> should.fail()
+  }
+}
+
 pub fn decode_multi_polygon_with_invalid_sub_polygon_is_rejected_test() -> Nil {
   let input = "{\"type\":\"MultiPolygon\",\"coordinates\":[[[]]]}"
   case geojson.decode_geometry(input: input) {
