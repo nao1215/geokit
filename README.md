@@ -255,6 +255,15 @@ Full API reference: <https://hexdocs.pm/geokit/>.
   antimeridian. Split a shape that crosses it into a `MultiPolygon`
   at ±180°, as RFC 7946 §3.1.9 recommends.
 
+## Testing
+
+| Technique | Bug class caught here |
+|---|---|
+| Examples and unit tests | [Wrong values at documented edge cases](doc/testing.md#examples-and-unit-tests) |
+| Generated properties | [Broken invariants and round trips](doc/testing.md#generated-properties) |
+| Metamorphic relations | [Asymmetric handling of hemispheres, meridians, zoom levels and tolerances](doc/testing.md#metamorphic-relations) |
+| Differential testing | [Disagreement with reference implementations](doc/testing.md#differential-testing) |
+
 ## Verifying releases
 
 Each GitHub Release attaches the Hex package tarball (`geokit-<version>.tar`),
