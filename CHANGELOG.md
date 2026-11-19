@@ -7,6 +7,8 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-19
+
 ### Removed
 
 - Breaking: `mercator.tile`, the deprecated alias of `mercator.new`; call `mercator.new`.
