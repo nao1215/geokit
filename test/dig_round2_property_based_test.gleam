@@ -94,8 +94,7 @@ fn precision_gen() -> generator.Generator(Int) {
 }
 
 fn tile_gen() -> generator.Generator(mercator.Tile) {
-  // Zoom 1..20 (zoom 0 makes quadkey == "" which `from_quadkey`
-  // rejects with EmptyQuadkey).
+  // Zoom 1..20; zoom 0 has the empty quadkey, covered by mercator_test.
   generator.bind(generator.int(range.constant(1, 20)), fn(z) {
     let max_coord = pow2(z) - 1
     generator.map2(

@@ -7,6 +7,11 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+### Removed
+
+- Breaking: `mercator.tile`, the deprecated alias of `mercator.new`; call `mercator.new`.
+- Breaking: the `mercator.EmptyQuadkey` error variant. No function has returned it since `from_quadkey("")` started returning the zoom-0 root tile; drop it from `case` arms.
+
 ### Added
 
 - GitHub Releases now attach the package tarball, `checksums.txt`, its cosign signature (`checksums.txt.sigstore.json`) and build provenance (`.intoto.jsonl`). See "Verifying releases" in the README.

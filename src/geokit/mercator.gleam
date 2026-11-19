@@ -37,11 +37,6 @@ pub type MercatorError {
   TileCoordOutOfRange(zoom: Int, x: Int, y: Int)
   /// A character outside `{0, 1, 2, 3}` appeared in a quadkey.
   InvalidQuadkeyChar(char: String, position: Int)
-  /// No longer emitted by any function in this module — `from_quadkey`
-  /// now treats `""` as the zoom-0 root tile per the Bing Maps spec.
-  /// Retained for backwards compatibility with pattern-matching
-  /// callers; safe to remove from `case` arms.
-  EmptyQuadkey
 }
 
 // --- Constructors / accessors -------------------------------------------
@@ -62,13 +57,6 @@ pub fn new(zoom zoom: Int, x x: Int, y y: Int) -> Result(Tile, MercatorError) {
     return: Error(TileCoordOutOfRange(zoom: zoom, x: x, y: y)),
   )
   Ok(Tile(zoom: zoom, x: x, y: y))
-}
-
-/// Build a [`Tile`](#Tile). Alias for [`new`](#new) kept for backward
-/// compatibility; new code should call [`new`](#new) instead.
-@deprecated("Use mercator.new — the constructor was renamed for parity with latlng.new (will be removed in 1.0).")
-pub fn tile(zoom zoom: Int, x x: Int, y y: Int) -> Result(Tile, MercatorError) {
-  new(zoom: zoom, x: x, y: y)
 }
 
 /// Zoom level of `tile`.
