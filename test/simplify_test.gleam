@@ -66,6 +66,41 @@ pub fn simplify_dropped_at_large_tolerance_test() -> Nil {
   |> should.equal(2)
 }
 
+pub fn simplify_diagonal_segment_away_from_origin_test() -> Nil {
+  // Segment (lng 20, lat 10) - (lng 22, lat 12) with the middle point at
+  // (lng 20.5, lat 12): its distance to the line is 1.5 / sqrt(2), about
+  // 1.061 degrees. Both ends are away from the origin and the segment is
+  // diagonal, so a formula that adds a coordinate instead of subtracting it
+  // gives another distance.
+  let assert Ok(a) = latlng.new(lat: 10.0, lng: 20.0)
+  let assert Ok(b) = latlng.new(lat: 12.0, lng: 20.5)
+  let assert Ok(c) = latlng.new(lat: 12.0, lng: 22.0)
+  simplify.line_string(points: [a, b, c], tolerance: 1.0)
+  |> should.equal(Ok([a, b, c]))
+  simplify.line_string(points: [a, b, c], tolerance: 1.1)
+  |> should.equal(Ok([a, c]))
+}
+
+pub fn compute_accepts_zero_tolerance_test() -> Nil {
+  // Zero is the smallest valid tolerance; only negative values are errors.
+  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(b) = latlng.new(lat: 1.0, lng: 0.5)
+  let assert Ok(c) = latlng.new(lat: 0.0, lng: 1.0)
+  simplify.compute(geometry: geometry.LineString([a, b, c]), tolerance: 0.0)
+  |> should.equal(Ok(geometry.LineString([a, b, c])))
+}
+
+pub fn simplify_closed_line_away_from_origin_test() -> Nil {
+  // The first and last points coincide, so the distance is measured to
+  // that point: (lng 20.3, lat 10.4) is 0.5 degrees from (lng 20, lat 10).
+  let assert Ok(a) = latlng.new(lat: 10.0, lng: 20.0)
+  let assert Ok(b) = latlng.new(lat: 10.4, lng: 20.3)
+  simplify.line_string(points: [a, b, a], tolerance: 0.45)
+  |> should.equal(Ok([a, b, a]))
+  simplify.line_string(points: [a, b, a], tolerance: 0.55)
+  |> should.equal(Ok([a, a]))
+}
+
 // --- error ---------------------------------------------------------------
 
 pub fn simplify_negative_tolerance_test() -> Nil {

@@ -27,3 +27,15 @@ Each module has a `test/<module>_test.gleam` with fixed inputs and expected outp
 ## Nightly runs
 
 `.github/workflows/nightly-property.yml` runs the whole suite ten times with `METAMON_RUNS_MULTIPLIER=10`, each pass with a new seed. A failure report prints its seed, so the case can be replayed with `metamon.with_seed` and kept as a regression test.
+
+## Mutation testing
+
+There is no mutation testing tool for Gleam, so `gleam_mutate.py` (from the mutation-testing lab in nao1215/debimate) is run by hand on a copy of the project. It rewrites one operator or boolean result at a time (`==`/`!=`, `&&`/`||`, float comparisons, `-.`/`+.`, `-> True`/`-> False`, a dropped `!`) and runs `gleam test` on the Erlang target. The score is killed / (killed + lived).
+
+| Date | Files | Killed | Lived | Score |
+|---|---|---:|---:|---:|
+| 2026-11-19 | every module under `src/` | 79 | 13 | 85.9% |
+
+The first run scored 68/92 (73.9%). Every simplify test started its segment at the origin, so `x2 -. x1` and `x2 +. x1` gave the same distance; a diagonal segment and a closed line away from the origin now kill those six mutants. Tile coordinates were never negative in a test and `from_lat_lng` was never given an invalid zoom, an open GeoJSON ring always differed in both coordinates, and no test passed a zero tolerance to `simplify.compute`; tests for each now exist.
+
+The 13 survivors are boundary comparisons where `<.` and `<=.` give the same result at the boundary value (`wrap_longitude` at exactly ±180, `sqrt_nonneg` of 0, the absolute value of 0, the minimum in `bbox`, bearing normalisation at 0, rounding of -0 in `polyline`), and point-in-polygon edge tests where an endpoint lies on two edges, so the other edge still reports it.
