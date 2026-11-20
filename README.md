@@ -10,8 +10,8 @@
 [![License](https://img.shields.io/github/license/nao1215/geokit)](./LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/nao1215/geokit/badge)](https://scorecard.dev/viewer/?uri=github.com/nao1215/geokit)
 
-Spherical-earth math, location encodings, and geometry operations for
-Gleam. Runs on the Erlang and JavaScript targets.
+Distance, bearing, geohash, polyline, GeoJSON, map tiles and polygon
+operations for Gleam, on the Erlang and JavaScript targets.
 
 ```sh
 gleam add geokit
@@ -91,7 +91,7 @@ pub fn route() -> Nil {
 }
 ```
 
-GeoJSON encode and decode (RFC 7946) — Feature with typed properties:
+GeoJSON (RFC 7946) Feature with typed properties:
 
 ```gleam
 import gleam/dynamic/decode
@@ -135,8 +135,7 @@ pub fn round_trip() -> Nil {
 }
 ```
 
-Decoding a `FeatureCollection` from an external source — pass
-`decode.dynamic` when you don't care about typed properties:
+A `FeatureCollection` with untyped properties, using `decode.dynamic`:
 
 ```gleam
 import gleam/dynamic/decode
@@ -236,21 +235,20 @@ pub fn park_and_lake() {
 }
 ```
 
-Full API reference: <https://hexdocs.pm/geokit/>.
+API reference: <https://hexdocs.pm/geokit/>.
 
 ## Notes
 
-- Latitudes are in degrees in `[-90, 90]`; longitudes in degrees in
-  `[-180, 180]`. The opaque `LatLng` type enforces this at
-  construction; use `latlng.wrap` when your source data may be
-  denormalised.
+- Latitudes are degrees in `[-90, 90]` and longitudes degrees in
+  `[-180, 180]`. `latlng.new` rejects anything outside; `latlng.wrap`
+  normalises it instead.
 - Distance and bearing use the spherical-earth approximation with the
   WGS84 mean radius of 6_371_008.8 m. The error against an
   ellipsoidal (Vincenty) distance is bounded by 0.5 % anywhere on
   Earth.
-- All polygon and line operations treat the lat/lng plane as flat — no
-  projection is applied. For polygons spanning more than a few
-  degrees, project to Web Mercator via `geokit/mercator` first.
+- Polygon and line operations treat the lat/lng plane as flat. For
+  polygons spanning more than a few degrees, project to Web Mercator
+  with `geokit/mercator` first.
 - Bounding boxes and point-in-polygon tests do not wrap around the
   antimeridian. Split a shape that crosses it into a `MultiPolygon`
   at ±180°, as RFC 7946 §3.1.9 recommends.
