@@ -7,7 +7,7 @@
 import gleam/dynamic/decode
 import gleam/json
 import gleam/list
-import gleam/option.{None}
+import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
 import gleeunit/should
@@ -133,14 +133,14 @@ pub fn round_trip() -> Nil {
   let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let feature =
     geojson.Feature(
-      geometry: geokit.Point(p),
+      geometry: Some(geokit.Point(p)),
       properties: City(name: "Tokyo", population: 13_960_000),
       id: None,
     )
   let encoded =
-    geojson.encode_feature(feature: feature, properties: city_to_json)
+    geojson.feature_to_json(feature, properties: city_to_json) |> json.to_string
   let assert Ok(_decoded) =
-    geojson.decode_feature(input: encoded, properties: city_decoder())
+    json.parse(encoded, geojson.feature_decoder(properties: city_decoder()))
   Nil
 }
 
@@ -150,14 +150,14 @@ fn round_trip_inspect() -> geojson.Feature(City) {
   let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let feature =
     geojson.Feature(
-      geometry: geokit.Point(p),
+      geometry: Some(geokit.Point(p)),
       properties: City(name: "Tokyo", population: 13_960_000),
       id: None,
     )
   let encoded =
-    geojson.encode_feature(feature: feature, properties: city_to_json)
+    geojson.feature_to_json(feature, properties: city_to_json) |> json.to_string
   let assert Ok(decoded) =
-    geojson.decode_feature(input: encoded, properties: city_decoder())
+    json.parse(encoded, geojson.feature_decoder(properties: city_decoder()))
   decoded
 }
 
@@ -168,7 +168,7 @@ pub fn readme_geojson_round_trip_test() -> Nil {
   let f = round_trip_inspect()
   f.properties |> should.equal(City("Tokyo", 13_960_000))
   case f.geometry {
-    geokit.Point(p) -> {
+    Some(geokit.Point(p)) -> {
       geokit.latitude(p) |> should.equal(35.6812)
       geokit.longitude(p) |> should.equal(139.7671)
     }
@@ -180,7 +180,10 @@ pub fn readme_geojson_round_trip_test() -> Nil {
 
 pub fn parse_collection(input: String) -> Int {
   let assert Ok(features) =
-    geojson.decode_feature_collection(input: input, properties: decode.dynamic)
+    json.parse(
+      input,
+      geojson.feature_collection_decoder(properties: decode.dynamic),
+    )
   list.length(features)
 }
 

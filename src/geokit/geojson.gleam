@@ -1,24 +1,10 @@
-//// GeoJSON (RFC 7946) encode / decode.
-////
-//// Maps geokit's [`Geometry`](../geometry.html) ADT to and from the
-//// JSON shapes defined in RFC 7946:
-////
-//// - `Point` / `MultiPoint` / `LineString` / `Polygon` /
-////   `MultiPolygon` round-trip through this module.
-//// - `MultiLineString` and `GeometryCollection` are valid GeoJSON
-////   types but are not currently representable in `Geometry`;
-////   decoding returns [`UnsupportedType`](#GeoJsonError).
-////
-//// Coordinate order in GeoJSON is `[longitude, latitude]`, opposite
-//// of the `lat: ..., lng: ...` constructors elsewhere in geokit.
-//// The encoder and decoder handle the swap so callers never see the
-//// reversed order. Altitude (a third coordinate) is accepted on
-//// decode but discarded.
-////
-//// Properties on [`Feature`](#Feature) and `FeatureCollection` are
-//// user-typed: pass a `Json` builder when encoding and a
-//// `decode.Decoder` when decoding. Use `gleam/dynamic/decode.dynamic`
-//// and `gleam/json.null()` if you don't care about properties.
+//// GeoJSON (RFC 7946) encoders and decoders for geokit geometries and for
+//// features with properties of your own type. Encoders return a
+//// `json.Json` for `json.to_string`, and decoders are for `json.parse`.
+//// GeoJSON writes a position as `[longitude, latitude]`; a third number
+//// (altitude) is accepted when decoding and dropped. Decoders reject
+//// positions out of range, polygon rings that are open or have fewer
+//// than 4 positions, and `GeometryCollection`.
 
 import gleam/bool
 import gleam/dynamic/decode.{type Decoder}
@@ -26,281 +12,219 @@ import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import gleam/result
-import gleam/string
 
-import geokit.{type Geometry, type LatLng}
-
-// --- Public types --------------------------------------------------------
-
-/// Errors returned by the decoders.
-pub type GeoJsonError {
-  /// The input was not valid JSON.
-  InvalidJson(reason: String)
-  /// The input was valid JSON but the structure did not match the
-  /// expected GeoJSON shape (missing field, wrong field type, ...).
-  InvalidStructure(reason: String)
-  /// The `type` field carried a string that is not a known GeoJSON
-  /// geometry or container type.
-  UnknownType(type_: String)
-  /// The `type` is a valid GeoJSON type but cannot be represented in
-  /// geokit's `Geometry` ADT (`MultiLineString`, `GeometryCollection`).
-  UnsupportedType(type_: String)
-  /// A coordinate array did not have the expected shape — fewer than
-  /// two elements, or non-numeric entries.
-  InvalidPosition(coords: List(Float))
-  /// A coordinate pair was structurally valid but the values fell
-  /// outside the documented domain of `latlng.new`.
-  InvalidLatLng(error: geokit.LatLngError)
-  /// A Polygon (or `MultiPolygon` sub-polygon) failed an RFC 7946
-  /// §3.1.6 invariant. The accompanying `reason` names the specific
-  /// violation: a Polygon with no rings, a ring with fewer than four
-  /// positions, or a ring whose first position is not equal to its
-  /// last.
-  InvalidPolygon(reason: String)
+import geokit.{
+  type Geometry, type LatLng, LineString, MultiLineString, MultiPoint,
+  MultiPolygon, Point, Polygon,
 }
 
-/// A GeoJSON `id` value. RFC 7946 §3.2 allows either a JSON string
-/// or a JSON number; this type captures both losslessly.
+/// The `id` of a feature: a string or a number.
 pub type FeatureId {
-  StringId(value: String)
-  IntId(value: Int)
+  StringId(String)
+  IntId(Int)
+  FloatId(Float)
 }
 
-/// A GeoJSON Feature. Properties are user-typed: the type parameter
-/// `properties` is whatever your application chooses (often a record
-/// type, sometimes a `dict.Dict(String, dynamic.Dynamic)` for fully
-/// dynamic payloads).
+/// A GeoJSON feature. `geometry` is `None` for a feature whose geometry
+/// is `null`.
 pub type Feature(properties) {
-  Feature(geometry: Geometry, properties: properties, id: Option(FeatureId))
-}
-
-// --- Encoding ------------------------------------------------------------
-
-/// Encode a `Geometry` as a GeoJSON string. The result is a compact
-/// JSON document with no whitespace.
-///
-/// ```gleam
-/// import geokit/geojson
-/// import geokit/geometry
-/// import geokit/latlng
-///
-/// let assert Ok(p) = geokit.lat_lng(latitude: 35.0, longitude: 139.0)
-/// geojson.encode_geometry(geometry: geokit.Point(p))
-/// // == "{\"type\":\"Point\",\"coordinates\":[139.0,35.0]}"
-/// ```
-pub fn encode_geometry(geometry geometry: Geometry) -> String {
-  geometry |> geometry_to_json |> json.to_string
-}
-
-/// Encode a `Feature` as a GeoJSON string. Pass a function that turns
-/// your properties type into a `Json` value.
-pub fn encode_feature(
-  feature feature: Feature(p),
-  properties to_json: fn(p) -> Json,
-) -> String {
-  feature |> feature_to_json(to_json) |> json.to_string
-}
-
-/// Encode a list of features as a GeoJSON `FeatureCollection`.
-pub fn encode_feature_collection(
-  features features: List(Feature(p)),
-  properties to_json: fn(p) -> Json,
-) -> String {
-  let entries = [
-    #("type", json.string("FeatureCollection")),
-    #(
-      "features",
-      json.preprocessed_array(
-        list.map(features, fn(f) { feature_to_json(f, to_json) }),
-      ),
-    ),
-  ]
-  json.object(entries) |> json.to_string
-}
-
-// --- Decoding ------------------------------------------------------------
-
-/// Decode a GeoJSON geometry string back to a `Geometry`.
-pub fn decode_geometry(input input: String) -> Result(Geometry, GeoJsonError) {
-  parse_with(input, geometry_decoder())
-}
-
-/// Decode a GeoJSON Feature. Pass a decoder for your properties type.
-/// To accept any shape, pass `decode.dynamic`.
-pub fn decode_feature(
-  input input: String,
-  properties properties: Decoder(p),
-) -> Result(Feature(p), GeoJsonError) {
-  parse_with(input, feature_decoder(properties))
-}
-
-/// Decode a GeoJSON FeatureCollection into a list of features.
-pub fn decode_feature_collection(
-  input input: String,
-  properties properties: Decoder(p),
-) -> Result(List(Feature(p)), GeoJsonError) {
-  parse_with(input, feature_collection_decoder(properties))
-}
-
-// --- Geometry → JSON -----------------------------------------------------
-
-fn geometry_to_json(g: Geometry) -> Json {
-  case g {
-    geokit.Point(p) -> object_with_coords("Point", position_to_json(p))
-    geokit.MultiPoint(points) ->
-      object_with_coords(
-        "MultiPoint",
-        json.preprocessed_array(list.map(points, position_to_json)),
-      )
-    geokit.LineString(points) ->
-      object_with_coords(
-        "LineString",
-        json.preprocessed_array(list.map(points, position_to_json)),
-      )
-    geokit.MultiLineString(lines) ->
-      object_with_coords("MultiLineString", rings_to_json(lines))
-    geokit.Polygon(rings) -> object_with_coords("Polygon", rings_to_json(rings))
-    geokit.MultiPolygon(polygons) ->
-      object_with_coords(
-        "MultiPolygon",
-        json.preprocessed_array(list.map(polygons, rings_to_json)),
-      )
-  }
-}
-
-fn rings_to_json(rings: List(List(LatLng))) -> Json {
-  json.preprocessed_array(
-    list.map(rings, fn(ring) {
-      json.preprocessed_array(list.map(ring, position_to_json))
-    }),
+  Feature(
+    geometry: Option(Geometry),
+    properties: properties,
+    id: Option(FeatureId),
   )
 }
 
-fn position_to_json(p: LatLng) -> Json {
-  // GeoJSON order: [longitude, latitude].
-  json.preprocessed_array([
-    json.float(geokit.longitude(p)),
-    json.float(geokit.latitude(p)),
-  ])
-}
+const geometry_types =
+  "Point, MultiPoint, LineString, MultiLineString, Polygon or MultiPolygon"
 
-fn object_with_coords(type_name: String, coordinates: Json) -> Json {
+// --- Encoding ------------------------------------------------------------
+
+/// Returns the GeoJSON geometry object for `geometry`.
+///
+/// ## Examples
+///
+/// ```gleam
+/// geokit.wrap_lat_lng(latitude: 35.5, longitude: 139.5)
+/// |> geokit.Point
+/// |> geometry_to_json
+/// |> json.to_string
+/// // -> "{\"type\":\"Point\",\"coordinates\":[139.5,35.5]}"
+/// ```
+pub fn geometry_to_json(geometry: Geometry) -> Json {
+  let #(name, coordinates) = case geometry {
+    Point(point) -> #("Point", position_to_json(point))
+    MultiPoint(points) -> #("MultiPoint", positions_to_json(points))
+    LineString(points) -> #("LineString", positions_to_json(points))
+    MultiLineString(lines) -> #(
+      "MultiLineString",
+      json.array(lines, positions_to_json),
+    )
+    Polygon(rings) -> #("Polygon", json.array(rings, positions_to_json))
+    MultiPolygon(polygons) -> #(
+      "MultiPolygon",
+      json.array(polygons, json.array(_, positions_to_json)),
+    )
+  }
   json.object([
-    #("type", json.string(type_name)),
+    #("type", json.string(name)),
     #("coordinates", coordinates),
   ])
 }
 
-// --- Feature → JSON ------------------------------------------------------
+fn positions_to_json(points: List(LatLng)) -> Json {
+  json.array(points, position_to_json)
+}
 
-fn feature_to_json(feature: Feature(p), to_json: fn(p) -> Json) -> Json {
-  let base = [
+fn position_to_json(point: LatLng) -> Json {
+  json.preprocessed_array([
+    json.float(geokit.longitude(point)),
+    json.float(geokit.latitude(point)),
+  ])
+}
+
+/// Returns the GeoJSON feature object for `feature`, encoding its
+/// properties with `properties`. A `None` geometry is written as `null`
+/// and a `None` id is left out.
+///
+/// ## Examples
+///
+/// ```gleam
+/// Feature(geometry: None, properties: "Tokyo", id: Some(IntId(1)))
+/// |> feature_to_json(properties: fn(name) {
+///   json.object([#("name", json.string(name))])
+/// })
+/// |> json.to_string
+/// // -> "{\"type\":\"Feature\",\"geometry\":null,\"properties\":{\"name\":\"Tokyo\"},\"id\":1}"
+/// ```
+pub fn feature_to_json(
+  feature: Feature(p),
+  properties properties: fn(p) -> Json,
+) -> Json {
+  let entries = [
     #("type", json.string("Feature")),
-    #("geometry", geometry_to_json(feature.geometry)),
-    #("properties", to_json(feature.properties)),
+    #("geometry", json.nullable(feature.geometry, geometry_to_json)),
+    #("properties", properties(feature.properties)),
   ]
-  let entries = case feature.id {
-    None -> base
-    Some(id) -> list.append(base, [#("id", id_to_json(id))])
-  }
-  json.object(entries)
+  json.object(case feature.id {
+    None -> entries
+    Some(id) -> list.append(entries, [#("id", id_to_json(id))])
+  })
 }
 
 fn id_to_json(id: FeatureId) -> Json {
   case id {
-    StringId(value: value) -> json.string(value)
-    IntId(value: value) -> json.int(value)
+    StringId(value) -> json.string(value)
+    IntId(value) -> json.int(value)
+    FloatId(value) -> json.float(value)
   }
 }
 
-// --- JSON → Geometry (decoder pipeline) ----------------------------------
+/// Returns the GeoJSON feature collection object for `features`,
+/// encoding each feature's properties with `properties`.
+///
+/// ## Examples
+///
+/// ```gleam
+/// [Feature(geometry: None, properties: Nil, id: None)]
+/// |> feature_collection_to_json(properties: fn(_) { json.null() })
+/// |> json.to_string
+/// // -> "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":null,\"properties\":null}]}"
+/// ```
+pub fn feature_collection_to_json(
+  features: List(Feature(p)),
+  properties properties: fn(p) -> Json,
+) -> Json {
+  json.object([
+    #("type", json.string("FeatureCollection")),
+    #("features", json.array(features, feature_to_json(_, properties:))),
+  ])
+}
 
-fn parse_with(
-  input: String,
-  decoder: Decoder(Result(t, GeoJsonError)),
-) -> Result(t, GeoJsonError) {
-  case json.parse(from: input, using: decoder) {
-    Error(err) -> Error(json_error_to_geojson(err))
-    Ok(Ok(value)) -> Ok(value)
-    Ok(Error(geojson_err)) -> Error(geojson_err)
+// --- Decoding ------------------------------------------------------------
+
+/// Returns a decoder for a GeoJSON geometry object. Integer and
+/// fractional coordinates are both accepted.
+///
+/// ## Examples
+///
+/// ```gleam
+/// json.parse(
+///   "{\"type\":\"Point\",\"coordinates\":[139.5,35.5]}",
+///   geometry_decoder(),
+/// )
+/// // -> Ok(Point(geokit.wrap_lat_lng(latitude: 35.5, longitude: 139.5)))
+/// ```
+///
+/// ```gleam
+/// json.parse(
+///   "{\"type\":\"Circle\",\"coordinates\":[139.5,35.5]}",
+///   geometry_decoder(),
+/// )
+/// // -> Error(json.UnableToDecode([decode.DecodeError(
+/// //   expected: "Point, MultiPoint, LineString, MultiLineString, Polygon or MultiPolygon",
+/// //   found: "String",
+/// //   path: ["type"],
+/// // )]))
+/// ```
+pub fn geometry_decoder() -> Decoder(Geometry) {
+  use name <- decode.field("type", decode.string)
+  case name {
+    "Point" -> coordinates(position_decoder(), Point)
+    "MultiPoint" -> coordinates(decode.list(position_decoder()), MultiPoint)
+    "LineString" -> coordinates(decode.list(position_decoder()), LineString)
+    "MultiLineString" ->
+      coordinates(decode.list(decode.list(position_decoder())), MultiLineString)
+    "Polygon" -> coordinates(rings_decoder(), Polygon)
+    "MultiPolygon" -> coordinates(decode.list(rings_decoder()), MultiPolygon)
+    _ ->
+      decode.field(
+        "type",
+        decode.failure(MultiPoint([]), geometry_types),
+        decode.success,
+      )
   }
 }
 
-fn json_error_to_geojson(err: json.DecodeError) -> GeoJsonError {
-  case err {
-    json.UnexpectedEndOfInput -> InvalidJson("unexpected end of input")
-    json.UnexpectedByte(byte) -> InvalidJson("unexpected byte: " <> byte)
-    json.UnexpectedSequence(seq) -> InvalidJson("unexpected sequence: " <> seq)
-    json.UnableToDecode(errors) ->
-      InvalidStructure(decode_errors_to_reason(errors))
+fn coordinates(
+  decoder: Decoder(a),
+  to_geometry: fn(a) -> Geometry,
+) -> Decoder(Geometry) {
+  use value <- decode.field("coordinates", decoder)
+  decode.success(to_geometry(value))
+}
+
+// A polygon is one or more linear rings: closed, with at least four
+// positions (RFC 7946 section 3.1.6).
+fn rings_decoder() -> Decoder(List(List(LatLng))) {
+  use rings <- decode.then(decode.list(ring_decoder()))
+  use <- bool.guard(when: rings != [], return: decode.success(rings))
+  decode.failure([], "Polygon with at least one linear ring")
+}
+
+fn ring_decoder() -> Decoder(List(LatLng)) {
+  use ring <- decode.then(decode.list(position_decoder()))
+  case ring, list.last(ring) {
+    [first, _, _, _, ..], Ok(last) if first == last -> decode.success(ring)
+    [_, _, _, _, ..], _ ->
+      decode.failure(ring, "closed linear ring (first position equal to last)")
+    _, _ -> decode.failure(ring, "linear ring with at least 4 positions")
   }
 }
 
-// The reason names the failing path, the expected type and the value
-// that was found, taken from the first decode error.
-fn decode_errors_to_reason(errors: List(decode.DecodeError)) -> String {
-  case errors {
-    [] -> "JSON shape did not match expected GeoJSON"
-    [first, ..] -> decode_error_to_reason(first)
-  }
-}
-
-fn decode_error_to_reason(err: decode.DecodeError) -> String {
-  let path = case err.path {
-    [] -> "<root>"
-    _ -> string.join(err.path, ".")
-  }
-  "at " <> path <> ": expected " <> err.expected <> ", got " <> err.found
-}
-
-fn geometry_decoder() -> Decoder(Result(Geometry, GeoJsonError)) {
-  use type_ <- decode.field("type", decode.string)
-  case type_ {
-    "Point" -> {
-      use coords <- decode.field("coordinates", decode.list(number_decoder()))
-      decode.success(raw_point_to_geometry(coords))
-    }
-    "MultiPoint" -> {
-      use coords <- decode.field(
-        "coordinates",
-        decode.list(decode.list(number_decoder())),
-      )
-      decode.success(raw_multi_point_to_geometry(coords))
-    }
-    "LineString" -> {
-      use coords <- decode.field(
-        "coordinates",
-        decode.list(decode.list(number_decoder())),
-      )
-      decode.success(raw_line_string_to_geometry(coords))
-    }
-    "Polygon" -> {
-      use coords <- decode.field(
-        "coordinates",
-        decode.list(decode.list(decode.list(number_decoder()))),
-      )
-      decode.success(raw_polygon_to_geometry(coords))
-    }
-    "MultiPolygon" -> {
-      use coords <- decode.field(
-        "coordinates",
-        decode.list(decode.list(decode.list(decode.list(number_decoder())))),
-      )
-      decode.success(raw_multi_polygon_to_geometry(coords))
-    }
-    "MultiLineString" -> {
-      use coords <- decode.field(
-        "coordinates",
-        decode.list(decode.list(decode.list(number_decoder()))),
-      )
-      decode.success(
-        list.try_map(coords, list.try_map(_, parse_position))
-        |> result.map(geokit.MultiLineString),
-      )
-    }
-    "GeometryCollection" -> decode.success(Error(UnsupportedType(type_)))
-    other -> decode.success(Error(UnknownType(other)))
+fn position_decoder() -> Decoder(LatLng) {
+  use numbers <- decode.then(decode.list(number_decoder()))
+  let origin = geokit.wrap_lat_lng(latitude: 0.0, longitude: 0.0)
+  case numbers {
+    [longitude, latitude] | [longitude, latitude, _] ->
+      case geokit.lat_lng(latitude:, longitude:) {
+        Ok(point) -> decode.success(point)
+        Error(geokit.LatitudeOutOfRange(_)) ->
+          decode.failure(origin, "latitude in [-90, 90]")
+        Error(geokit.LongitudeOutOfRange(_)) ->
+          decode.failure(origin, "longitude in [-180, 180]")
+      }
+    _ -> decode.failure(origin, "position of 2 or 3 numbers")
   }
 }
 
@@ -323,126 +247,88 @@ fn number_decoder() -> Decoder(Float) {
 
 const max_integer_coordinate: Int = 1_000_000_000
 
-fn raw_point_to_geometry(
-  coords: List(Float),
-) -> Result(Geometry, GeoJsonError) {
-  use point <- result.map(parse_position(coords))
-  geokit.Point(point)
-}
-
-fn raw_line_string_to_geometry(
-  coords: List(List(Float)),
-) -> Result(Geometry, GeoJsonError) {
-  use points <- result.map(list.try_map(coords, parse_position))
-  geokit.LineString(points)
-}
-
-fn raw_multi_point_to_geometry(
-  coords: List(List(Float)),
-) -> Result(Geometry, GeoJsonError) {
-  use points <- result.map(list.try_map(coords, parse_position))
-  geokit.MultiPoint(points)
-}
-
-fn raw_polygon_to_geometry(
-  coords: List(List(List(Float))),
-) -> Result(Geometry, GeoJsonError) {
-  use rings <- result.map(parse_rings(coords))
-  geokit.Polygon(rings)
-}
-
-fn raw_multi_polygon_to_geometry(
-  coords: List(List(List(List(Float)))),
-) -> Result(Geometry, GeoJsonError) {
-  use polygons <- result.map(list.try_map(coords, parse_rings))
-  geokit.MultiPolygon(polygons)
-}
-
-fn parse_rings(
-  raw: List(List(List(Float))),
-) -> Result(List(List(LatLng)), GeoJsonError) {
-  use <- bool.guard(
-    when: raw == [],
-    return: Error(InvalidPolygon(
-      reason: "Polygon must contain at least one linear ring (RFC 7946 §3.1.6)",
-    )),
-  )
-  use rings <- result.try(
-    list.try_map(raw, fn(ring) { list.try_map(ring, parse_position) }),
-  )
-  use _ <- result.map(list.try_each(rings, check_linear_ring))
-  rings
-}
-
-fn check_linear_ring(ring: List(LatLng)) -> Result(Nil, GeoJsonError) {
-  case ring, list.last(ring) {
-    [first, _, _, _, ..], Ok(last) ->
-      case first == last {
-        True -> Ok(Nil)
-        False ->
-          Error(InvalidPolygon(
-            reason: "linear ring must be closed: first position must equal last (RFC 7946 §3.1.6)",
-          ))
-      }
-    _, _ ->
-      Error(InvalidPolygon(
-        reason: "linear ring must have at least four positions (RFC 7946 §3.1.6)",
-      ))
-  }
-}
-
-fn parse_position(coords: List(Float)) -> Result(LatLng, GeoJsonError) {
-  case coords {
-    [lng, lat] -> wrap_position(lng, lat)
-    [lng, lat, _altitude] -> wrap_position(lng, lat)
-    _ -> Error(InvalidPosition(coords))
-  }
-}
-
-fn wrap_position(lng: Float, lat: Float) -> Result(LatLng, GeoJsonError) {
-  geokit.lat_lng(latitude: lat, longitude: lng)
-  |> result.map_error(InvalidLatLng)
-}
-
-// --- JSON → Feature ------------------------------------------------------
-
-fn feature_decoder(
-  properties_decoder: Decoder(p),
-) -> Decoder(Result(Feature(p), GeoJsonError)) {
-  use type_ <- decode.field("type", decode.string)
-  case type_ {
-    "Feature" -> {
-      use raw_geometry <- decode.field("geometry", geometry_decoder())
-      use props <- decode.field("properties", properties_decoder)
-      use id <- decode.optional_field("id", None, decode.optional(id_decoder()))
-      decode.success(
-        result.map(raw_geometry, fn(g) {
-          Feature(geometry: g, properties: props, id: id)
-        }),
-      )
-    }
-    other -> decode.success(Error(UnknownType(other)))
-  }
+/// Returns a decoder for a GeoJSON feature object, decoding its
+/// properties with `properties`. A `null` geometry decodes to `None` and
+/// a missing or `null` id to `None`.
+///
+/// ## Examples
+///
+/// ```gleam
+/// json.parse(
+///   "{\"type\":\"Feature\",\"geometry\":null,\"properties\":{\"name\":\"Tokyo\"},\"id\":1}",
+///   feature_decoder(properties: decode.at(["name"], decode.string)),
+/// )
+/// // -> Ok(Feature(geometry: None, properties: "Tokyo", id: Some(IntId(1))))
+/// ```
+///
+/// ```gleam
+/// json.parse(
+///   "{\"type\":\"Point\",\"coordinates\":[0,0]}",
+///   feature_decoder(properties: decode.dynamic),
+/// )
+/// |> result.is_error
+/// // -> True
+/// ```
+///
+/// ## Target specific behavior
+///
+/// On JavaScript a number id with no fractional part, such as `1.0`,
+/// decodes to `IntId`. On Erlang `1.0` decodes to `FloatId(1.0)`.
+pub fn feature_decoder(
+  properties properties: Decoder(p),
+) -> Decoder(Feature(p)) {
+  use _ <- decode.field("type", constant("Feature"))
+  use geometry <- decode.field("geometry", decode.optional(geometry_decoder()))
+  use properties <- decode.field("properties", properties)
+  use id <- decode.optional_field("id", None, decode.optional(id_decoder()))
+  decode.success(Feature(geometry:, properties:, id:))
 }
 
 fn id_decoder() -> Decoder(FeatureId) {
   decode.one_of(decode.map(decode.string, StringId), [
     decode.map(decode.int, IntId),
+    decode.map(decode.float, FloatId),
   ])
 }
 
-fn feature_collection_decoder(
-  properties_decoder: Decoder(p),
-) -> Decoder(Result(List(Feature(p)), GeoJsonError)) {
-  use type_ <- decode.field("type", decode.string)
-  case type_ {
-    "FeatureCollection" -> {
-      use features <- decode.field(
-        "features",
-        decode.list(feature_decoder(properties_decoder)),
-      )
-      decode.success(result.all(features))
-    }
-    other -> decode.success(Error(UnknownType(other)))
-  }
+/// Returns a decoder for a GeoJSON feature collection object, decoding
+/// each feature's properties with `properties`.
+///
+/// ## Examples
+///
+/// ```gleam
+/// json.parse(
+///   "{\"type\":\"FeatureCollection\",\"features\":[]}",
+///   feature_collection_decoder(properties: decode.dynamic),
+/// )
+/// // -> Ok([])
+/// ```
+///
+/// ```gleam
+/// json.parse(
+///   "{\"type\":\"Feature\",\"features\":[]}",
+///   feature_collection_decoder(properties: decode.dynamic),
+/// )
+/// // -> Error(json.UnableToDecode([decode.DecodeError(
+/// //   expected: "FeatureCollection",
+/// //   found: "String",
+/// //   path: ["type"],
+/// // )]))
+/// ```
+pub fn feature_collection_decoder(
+  properties properties: Decoder(p),
+) -> Decoder(List(Feature(p))) {
+  use _ <- decode.field("type", constant("FeatureCollection"))
+  use features <- decode.field(
+    "features",
+    decode.list(feature_decoder(properties:)),
+  )
+  decode.success(features)
+}
+
+// Succeeds on the string `expected` only.
+fn constant(expected: String) -> Decoder(Nil) {
+  use value <- decode.then(decode.string)
+  use <- bool.guard(when: value == expected, return: decode.success(Nil))
+  decode.failure(Nil, expected)
 }

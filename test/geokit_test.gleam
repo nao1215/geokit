@@ -1,4 +1,5 @@
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/result
 import gleam_community/maths
@@ -1106,8 +1107,9 @@ pub fn compute_polygon_keeps_ring_valid_test() -> Nil {
       ],
     ]),
   )
-  geojson.encode_geometry(geometry: simplified)
-  |> geojson.decode_geometry
+  geojson.geometry_to_json(simplified)
+  |> json.to_string
+  |> json.parse(geojson.geometry_decoder())
   |> should.equal(Ok(simplified))
 }
 
@@ -1139,8 +1141,9 @@ pub fn compute_polygon_falls_back_to_smallest_ring_test() -> Nil {
       [[ll(0.0, 0.0), ll(0.0, 10.0), ll(10.0, 10.0), ll(0.0, 0.0)]],
     ]),
   )
-  geojson.encode_geometry(geometry: simplified)
-  |> geojson.decode_geometry
+  geojson.geometry_to_json(simplified)
+  |> json.to_string
+  |> json.parse(geojson.geometry_decoder())
   |> should.equal(Ok(simplified))
 }
 
