@@ -215,3 +215,54 @@ pub fn neighbor_empty_hash_test() -> Nil {
     _ -> should.be_true(False)
   }
 }
+
+// --- antimeridian wrap --------------------------------------------------
+
+pub fn neighbor_west_wraps_across_antimeridian_test() -> Nil {
+  // ngeohash.neighbor(hash, [0, -1]) for cells on the western edge.
+  geohash.neighbor(hash: "0", direction: geohash.West)
+  |> should.equal(Ok("p"))
+  geohash.neighbor(hash: "00", direction: geohash.West)
+  |> should.equal(Ok("pb"))
+  geohash.neighbor(hash: "0000", direction: geohash.West)
+  |> should.equal(Ok("pbpb"))
+  geohash.neighbor(hash: "2", direction: geohash.West)
+  |> should.equal(Ok("r"))
+  geohash.neighbor(hash: "8", direction: geohash.West)
+  |> should.equal(Ok("x"))
+  geohash.neighbor(hash: "b", direction: geohash.West)
+  |> should.equal(Ok("z"))
+}
+
+pub fn neighbor_east_wraps_across_antimeridian_test() -> Nil {
+  geohash.neighbor(hash: "pbpb", direction: geohash.East)
+  |> should.equal(Ok("0000"))
+  geohash.neighbor(hash: "p", direction: geohash.East)
+  |> should.equal(Ok("0"))
+}
+
+pub fn neighbor_pole_still_fails_test() -> Nil {
+  geohash.neighbor(hash: "b", direction: geohash.North)
+  |> should.equal(Error(geohash.EmptyHash))
+  geohash.neighbor(hash: "0", direction: geohash.South)
+  |> should.equal(Error(geohash.EmptyHash))
+}
+
+// --- input validation ---------------------------------------------------
+
+pub fn neighbor_rejects_invalid_char_in_prefix_test() -> Nil {
+  geohash.neighbor(hash: "a0", direction: geohash.North)
+  |> should.equal(Error(geohash.InvalidCharacter(char: "a", position: 0)))
+  geohash.neighbor(hash: "u4i0", direction: geohash.East)
+  |> should.equal(Error(geohash.InvalidCharacter(char: "i", position: 2)))
+}
+
+pub fn neighbor_rejects_invalid_last_char_test() -> Nil {
+  geohash.neighbor(hash: "u4o", direction: geohash.South)
+  |> should.equal(Error(geohash.InvalidCharacter(char: "o", position: 2)))
+}
+
+pub fn neighbors_rejects_invalid_char_test() -> Nil {
+  geohash.neighbors(hash: "xl76u")
+  |> should.equal(Error(geohash.InvalidCharacter(char: "l", position: 1)))
+}

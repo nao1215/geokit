@@ -398,6 +398,7 @@ pub fn neighbor(
   direction direction: Direction,
 ) -> Result(String, GeohashError) {
   let normalised = string.lowercase(hash)
+  use _ <- result.try(hash_to_bits(hash: normalised, position: 0, acc: []))
   case direction {
     North -> step(hash: normalised, direction: North)
     South -> step(hash: normalised, direction: South)
@@ -459,9 +460,13 @@ fn step(
   let lookup = neighbor_table(direction: direction, is_even: is_even)
   let parent_result = case string.contains(border, last) {
     True ->
-      case parent {
-        "" -> Error(EmptyHash)
-        _ -> step(hash: parent, direction: direction)
+      case parent, direction {
+        // Crossing the antimeridian: the top-level cell wraps around,
+        // so the last character is looked up in the table as is.
+        "", East | "", West -> Ok("")
+        // Crossing a pole has no neighbour.
+        "", _ -> Error(EmptyHash)
+        _, _ -> step(hash: parent, direction: direction)
       }
     False -> Ok(parent)
   }
