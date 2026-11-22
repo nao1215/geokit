@@ -212,3 +212,38 @@ pub fn centroid_of_long_closed_ring_points_test() -> Nil {
   approx_equal(latlng.lng(c), 5.0, 1.0e-9)
   |> should.be_true
 }
+
+pub fn of_points_closed_ring_with_signed_zero_test() -> Nil {
+  // First (0.0, 0.0) and last (-0.0, -0.0) are the same vertex, so the
+  // closing duplicate is dropped and the mean is the square's centre.
+  let assert Ok(c) =
+    centroid.of_points(points: [
+      latlng.new_or_panic(lat: 0.0, lng: 0.0),
+      latlng.new_or_panic(lat: 0.0, lng: 1.0),
+      latlng.new_or_panic(lat: 1.0, lng: 1.0),
+      latlng.new_or_panic(lat: 1.0, lng: 0.0),
+      latlng.new_or_panic(lat: -0.0, lng: -0.0),
+    ])
+  #(latlng.lat(c), latlng.lng(c))
+  |> should.equal(#(0.5, 0.5))
+}
+
+pub fn polygon_centroid_with_signed_zero_closure_test() -> Nil {
+  // A closed triangle whose closing vertex is written with -0.0 must
+  // not be closed a second time.
+  let assert Ok(c) =
+    centroid.compute(
+      geometry: geometry.Polygon([
+        [
+          latlng.new_or_panic(lat: 0.0, lng: 0.0),
+          latlng.new_or_panic(lat: 0.0, lng: 3.0),
+          latlng.new_or_panic(lat: 3.0, lng: 0.0),
+          latlng.new_or_panic(lat: -0.0, lng: -0.0),
+        ],
+      ]),
+    )
+  approx_equal(latlng.lat(c), 1.0, 1.0e-12)
+  |> should.be_true
+  approx_equal(latlng.lng(c), 1.0, 1.0e-12)
+  |> should.be_true
+}

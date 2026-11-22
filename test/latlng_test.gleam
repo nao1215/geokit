@@ -106,3 +106,28 @@ pub fn equal_test() -> Nil {
   latlng.equal(a, c)
   |> should.be_false
 }
+
+// --- equal ---------------------------------------------------------------
+
+pub fn equal_treats_signed_zeros_as_equal_test() -> Nil {
+  // -0.0 and 0.0 are the same coordinate. Erlang's exact `==` on floats
+  // tells them apart; JavaScript does not.
+  latlng.equal(
+    a: latlng.new_or_panic(lat: 0.0, lng: -0.0),
+    b: latlng.new_or_panic(lat: -0.0, lng: 0.0),
+  )
+  |> should.be_true
+}
+
+pub fn equal_distinguishes_different_values_test() -> Nil {
+  latlng.equal(
+    a: latlng.new_or_panic(lat: 0.0, lng: 180.0),
+    b: latlng.new_or_panic(lat: 0.0, lng: -180.0),
+  )
+  |> should.be_false
+  latlng.equal(
+    a: latlng.new_or_panic(lat: 1.0, lng: 2.0),
+    b: latlng.new_or_panic(lat: 1.0, lng: 2.0),
+  )
+  |> should.be_true
+}

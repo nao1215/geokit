@@ -379,10 +379,7 @@ fn check_linear_ring(ring: List(LatLng)) -> Result(Nil, GeoJsonError) {
     [first, _, _, _, ..] ->
       case last_in_list(ring) {
         Ok(last) ->
-          case
-            latlng.lat(first) == latlng.lat(last)
-            && latlng.lng(first) == latlng.lng(last)
-          {
+          case latlng.equal(first, last) {
             True -> Ok(Nil)
             False ->
               Error(InvalidPolygon(

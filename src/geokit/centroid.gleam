@@ -72,10 +72,7 @@ pub fn of_points(points points: List(LatLng)) -> Result(LatLng, CentroidError) {
 fn drop_closing_duplicate(points: List(LatLng)) -> List(LatLng) {
   case points, list.reverse(points) {
     [first, _, _, ..], [last, ..before_last] ->
-      case
-        latlng.lat(first) == latlng.lat(last)
-        && latlng.lng(first) == latlng.lng(last)
-      {
+      case latlng.equal(first, last) {
         True -> list.reverse(before_last)
         False -> points
       }

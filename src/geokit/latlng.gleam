@@ -138,5 +138,12 @@ pub fn lng(p p: LatLng) -> Float {
 /// Value equality. Two `LatLng` values are equal iff their `lat` and
 /// `lng` components compare equal.
 pub fn equal(a a: LatLng, b b: LatLng) -> Bool {
-  a.lat == b.lat && a.lng == b.lng
+  same_degrees(a.lat, b.lat) && same_degrees(a.lng, b.lng)
+}
+
+// Numeric comparison instead of `==`: on Erlang `==` on floats is exact
+// and tells -0.0 from 0.0, while JavaScript treats them as equal. `>=.`
+// and `<=.` compare numerically on both targets.
+fn same_degrees(a: Float, b: Float) -> Bool {
+  a >=. b && a <=. b
 }

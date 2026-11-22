@@ -1,5 +1,6 @@
 import gleam/dynamic/decode
 import gleam/json
+import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import gleeunit/should
@@ -458,4 +459,16 @@ pub fn decode_polygons_with_integer_coordinates_test() -> Nil {
       ]),
     ),
   )
+}
+
+// --- signed zero --------------------------------------------------------
+
+pub fn decode_polygon_closed_with_signed_zero_test() -> Nil {
+  // The ring starts at 0.0 and ends at -0.0: the same position.
+  let input =
+    "{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[-0.0,-0.0]]]}"
+  let assert Ok(geometry.Polygon([ring])) =
+    geojson.decode_geometry(input: input)
+  list.length(ring)
+  |> should.equal(4)
 }
