@@ -40,7 +40,11 @@ const geometry_types =
 
 // --- Encoding ------------------------------------------------------------
 
-/// Returns the GeoJSON geometry object for `geometry`.
+/// Returns the GeoJSON geometry object for `geometry`. An open polygon
+/// ring is closed by repeating its first position at the end.
+/// [`geometry_decoder`](#geometry_decoder) rejects the output for a ring
+/// with fewer than 3 positions besides the closing one, or for a polygon
+/// without rings.
 ///
 /// ## Examples
 ///
@@ -60,16 +64,26 @@ pub fn geometry_to_json(geometry: Geometry) -> Json {
       "MultiLineString",
       json.array(lines, positions_to_json),
     )
-    Polygon(rings) -> #("Polygon", json.array(rings, positions_to_json))
+    Polygon(rings) -> #("Polygon", json.array(rings, ring_to_json))
     MultiPolygon(polygons) -> #(
       "MultiPolygon",
-      json.array(polygons, json.array(_, positions_to_json)),
+      json.array(polygons, json.array(_, ring_to_json)),
     )
   }
   json.object([
     #("type", json.string(name)),
     #("coordinates", coordinates),
   ])
+}
+
+// GeoJSON requires a closed ring, so an open one gets its first
+// position appended.
+fn ring_to_json(ring: List(LatLng)) -> Json {
+  case ring, list.last(ring) {
+    [first, ..], Ok(last) if first != last ->
+      positions_to_json(list.append(ring, [first]))
+    _, _ -> positions_to_json(ring)
+  }
 }
 
 fn positions_to_json(points: List(LatLng)) -> Json {

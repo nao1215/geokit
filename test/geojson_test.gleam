@@ -84,6 +84,19 @@ pub fn encode_multi_polygon_round_trip_test() -> Nil {
   round_trip(original) |> should.equal(original)
 }
 
+pub fn encode_open_polygon_ring_is_closed_test() -> Nil {
+  // geokit.Polygon allows open rings, but GeoJSON requires closed ones:
+  // the encoder appends the first position so the output decodes.
+  let a = p(35.0, 139.0)
+  let b = p(35.0, 139.5)
+  let c = p(35.5, 139.5)
+  let d = p(35.5, 139.0)
+  round_trip(geokit.Polygon([[a, b, c, d]]))
+  |> should.equal(geokit.Polygon([[a, b, c, d, a]]))
+  round_trip(geokit.MultiPolygon([[[a, b, c, d]]]))
+  |> should.equal(geokit.MultiPolygon([[[a, b, c, d, a]]]))
+}
+
 // --- encode: shape sanity via substring checks -------------------------
 
 pub fn encode_point_shape_test() -> Nil {
@@ -103,7 +116,10 @@ pub fn encode_polygon_nests_rings_test() -> Nil {
       ]),
     )
   string.contains(encoded, "\"type\":\"Polygon\"") |> should.be_true
-  string.contains(encoded, "[[[139.7671,35.6812],[139.7672,35.6813]]]")
+  string.contains(
+    encoded,
+    "[[[139.7671,35.6812],[139.7672,35.6813],[139.7671,35.6812]]]",
+  )
   |> should.be_true
 }
 
