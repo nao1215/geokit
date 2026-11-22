@@ -296,10 +296,23 @@ fn geometry_decoder() -> Decoder(Result(Geometry, GeoJsonError)) {
 }
 
 // JSON has a single number type; `1` and `1.0` are the same coordinate.
-// The Erlang JSON parser yields an Int for `1`, so accept both.
+// The Erlang JSON parser yields an Int for `1`, so accept both. A huge
+// integer stays a bignum on Erlang and `int.to_float` would raise on
+// it, so integers beyond `max_integer_coordinate` are a decode failure;
+// coordinates are degrees, so no valid position comes near the bound.
 fn number_decoder() -> Decoder(Float) {
-  decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])
+  decode.one_of(decode.float, [
+    {
+      use value <- decode.then(decode.int)
+      case int.absolute_value(value) <= max_integer_coordinate {
+        True -> decode.success(int.to_float(value))
+        False -> decode.failure(0.0, "Float")
+      }
+    },
+  ])
 }
+
+const max_integer_coordinate: Int = 1_000_000_000
 
 fn raw_point_to_geometry(
   coords: List(Float),

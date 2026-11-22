@@ -472,3 +472,24 @@ pub fn decode_polygon_closed_with_signed_zero_test() -> Nil {
   list.length(ring)
   |> should.equal(4)
 }
+
+// --- huge integers --------------------------------------------------------
+
+// The Erlang JSON parser keeps a huge integer as a bignum, which
+// `int.to_float` cannot convert; it must be a decode error, not a crash.
+@target(erlang)
+pub fn decode_huge_integer_coordinate_is_an_error_test() -> Nil {
+  let huge = "1" <> string.repeat("0", 400)
+  let input = "{\"type\":\"Point\",\"coordinates\":[" <> huge <> ",0]}"
+  case geojson.decode_geometry(input: input) {
+    Error(geojson.InvalidStructure(_)) -> Nil
+    _ -> should.be_true(False)
+  }
+}
+
+pub fn decode_integer_coordinates_test() -> Nil {
+  geojson.decode_geometry(
+    input: "{\"type\":\"Point\",\"coordinates\":[-180,90]}",
+  )
+  |> should.equal(Ok(geometry.Point(p(90.0, -180.0))))
+}
