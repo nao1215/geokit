@@ -8,7 +8,7 @@ Each module has a `test/<module>_test.gleam` with fixed inputs and expected outp
 
 ## Generated properties
 
-`test/dig_round2_property_based_test.gleam` and `test/point_in_polygon_property_test.gleam` use metamon: distance is non-negative, symmetric and obeys the triangle inequality; bearings stay in [0, 360); geohash prefixes, alphabet, bounds and neighbours; polyline round trips at precision 5 and 6; Web Mercator tiles contain their point and quadkeys round-trip; bbox, centroid and simplify are order-invariant and keep endpoints; point-in-polygon agrees with closed-form oracles for rectangles with holes and diamonds.
+`test/property_test.gleam` and `test/point_in_polygon_property_test.gleam` use metamon: distance is non-negative, symmetric and obeys the triangle inequality; bearings stay in [0, 360); geohash prefixes, alphabet, bounds and neighbours; polyline round trips at precision 5 and 6; Web Mercator tiles contain their point and quadkeys round-trip; bbox, centroid and simplify are order-invariant and keep endpoints; point-in-polygon agrees with closed-form oracles for rectangles with holes and diamonds.
 
 ## Metamorphic relations
 
@@ -22,7 +22,7 @@ Each module has a `test/<module>_test.gleam` with fixed inputs and expected outp
 
 ## Differential testing
 
-`test/dig_round1_differential_test.gleam` checks every public function against values from independent implementations, recorded next to each assertion so they can be regenerated: Python `math` for haversine and bearing on the same radius (6,371,008.8 m), `ngeohash` for geohash, `@mapbox/polyline` for polylines, the OSM slippy-map and Bing quadkey formulas for Web Mercator, and Turf for bbox, centroid and simplify.
+`test/differential_test.gleam` checks every public function against values from independent implementations, recorded next to each assertion so they can be regenerated: Python `math` for haversine and bearing on the same radius (6,371,008.8 m), `ngeohash` for geohash, `@mapbox/polyline` for polylines, the OSM slippy-map and Bing quadkey formulas for Web Mercator, and Turf for bbox, centroid and simplify.
 
 ## Nightly runs
 

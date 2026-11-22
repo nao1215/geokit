@@ -1,4 +1,4 @@
-//// dig-bug round 1: differential testing.
+//// Differential tests against independent implementations.
 ////
 //// Every public function in geokit is checked against a recognised
 //// reference implementation. The references are recorded next to
