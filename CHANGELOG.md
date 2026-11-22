@@ -26,27 +26,6 @@ The public API shrinks from 13 modules to 5: `geokit`, `geokit/geohash`, `geokit
 - `Geometry` gains `MultiLineString`.
 - The minimum `gleam_stdlib` is 0.51.0, the version `gleam_json` 3 needs.
 
-Before:
-
-```gleam
-import geokit/distance
-import geokit/latlng
-
-let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
-let assert Ok(osaka) = latlng.new(lat: 34.6937, lng: 135.5023)
-distance.haversine(a: tokyo, b: osaka)
-```
-
-After:
-
-```gleam
-import geokit
-
-let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-let assert Ok(osaka) = geokit.lat_lng(latitude: 34.6937, longitude: 135.5023)
-geokit.distance(from: tokyo, to: osaka)
-```
-
 ### Fixed
 
 - `geohash.neighbor` steps east or west across the antimeridian. `neighbor("0", West)` returned `Error(EmptyHash)` and now returns `Ok("p")`.
