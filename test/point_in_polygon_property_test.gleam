@@ -22,14 +22,12 @@
 import gleam/float
 import gleam/int
 import gleam/list
+import gleam/result
 import metamon
 import metamon/generator.{type Generator}
 import metamon/generator/range
 
-import geokit/bbox
-import geokit/geometry
-import geokit/latlng.{type LatLng}
-import geokit/point_in_polygon.{type Location, Inside, OnBoundary, Outside}
+import geokit.{type LatLng, type Location, Inside, OnBoundary, Outside}
 
 // --- Generators ----------------------------------------------------------
 
@@ -41,7 +39,7 @@ fn whole_degrees(lo: Int, hi: Int) -> Generator(Float) {
 /// translation by `offset_gen` stays inside it.
 fn grid_point_gen() -> Generator(LatLng) {
   generator.map2(whole_degrees(-40, 40), whole_degrees(-80, 80), fn(lat, lng) {
-    latlng.new_or_panic(lat: lat, lng: lng)
+    geokit.wrap_lat_lng(latitude: lat, longitude: lng)
   })
 }
 
@@ -63,11 +61,9 @@ fn offset_gen() -> Generator(#(Float, Float)) {
 // --- Helpers -------------------------------------------------------------
 
 fn locate_in(rings: List(List(LatLng)), point: LatLng) -> Location {
-  case
-    point_in_polygon.locate(geometry: geometry.Polygon(rings), point: point)
-  {
+  case geokit.locate(point, in: geokit.Polygon(rings)) {
     Ok(location) -> location
-    Error(point_in_polygon.NotAPolygon) -> Outside
+    Error(Nil) -> Outside
   }
 }
 
@@ -80,19 +76,25 @@ fn map_rings(
 
 fn translate_by(offset: #(Float, Float)) -> fn(LatLng) -> LatLng {
   fn(point) {
-    latlng.new_or_panic(
-      lat: latlng.lat(point) +. offset.0,
-      lng: latlng.lng(point) +. offset.1,
+    geokit.wrap_lat_lng(
+      latitude: geokit.latitude(point) +. offset.0,
+      longitude: geokit.longitude(point) +. offset.1,
     )
   }
 }
 
 fn mirror(point: LatLng) -> LatLng {
-  latlng.new_or_panic(lat: 0.0 -. latlng.lat(point), lng: latlng.lng(point))
+  geokit.wrap_lat_lng(
+    latitude: 0.0 -. geokit.latitude(point),
+    longitude: geokit.longitude(point),
+  )
 }
 
 fn mirror_lng(point: LatLng) -> LatLng {
-  latlng.new_or_panic(lat: latlng.lat(point), lng: 0.0 -. latlng.lng(point))
+  geokit.wrap_lat_lng(
+    latitude: geokit.latitude(point),
+    longitude: 0.0 -. geokit.longitude(point),
+  )
 }
 
 fn rotate(ring: List(LatLng), by: Int) -> List(LatLng) {
@@ -108,9 +110,9 @@ fn close(ring: List(LatLng)) -> List(LatLng) {
 }
 
 fn midpoint(a: LatLng, b: LatLng) -> LatLng {
-  latlng.new_or_panic(
-    lat: { latlng.lat(a) +. latlng.lat(b) } /. 2.0,
-    lng: { latlng.lng(a) +. latlng.lng(b) } /. 2.0,
+  geokit.wrap_lat_lng(
+    latitude: { geokit.latitude(a) +. geokit.latitude(b) } /. 2.0,
+    longitude: { geokit.longitude(a) +. geokit.longitude(b) } /. 2.0,
   )
 }
 
@@ -193,8 +195,8 @@ pub fn pbt_edge_midpoints_are_on_boundary_test() -> Nil {
 pub fn pbt_outside_bbox_is_outside_test() -> Nil {
   metamon.forall(generator.tuple2(rings_gen(), grid_point_gen()), fn(input) {
     let #(rings, point) = input
-    case bbox.compute(geometry: geometry.Polygon(rings)) {
-      Error(bbox.EmptyGeometry) -> locate_in(rings, point) == Outside
+    case bbox(geokit.Polygon(rings)) {
+      Error(Nil) -> locate_in(rings, point) == Outside
       Ok(#(sw, ne)) ->
         within(point, sw, ne) || locate_in(rings, point) == Outside
     }
@@ -202,18 +204,17 @@ pub fn pbt_outside_bbox_is_outside_test() -> Nil {
 }
 
 fn within(point: LatLng, sw: LatLng, ne: LatLng) -> Bool {
-  latlng.lat(sw) <=. latlng.lat(point)
-  && latlng.lat(point) <=. latlng.lat(ne)
-  && latlng.lng(sw) <=. latlng.lng(point)
-  && latlng.lng(point) <=. latlng.lng(ne)
+  geokit.latitude(sw) <=. geokit.latitude(point)
+  && geokit.latitude(point) <=. geokit.latitude(ne)
+  && geokit.longitude(sw) <=. geokit.longitude(point)
+  && geokit.longitude(point) <=. geokit.longitude(ne)
 }
 
 pub fn pbt_contains_is_locate_with_boundary_test() -> Nil {
   metamon.forall(generator.tuple2(rings_gen(), grid_point_gen()), fn(input) {
     let #(rings, point) = input
-    let polygon = geometry.Polygon(rings)
-    point_in_polygon.contains(geometry: polygon, point: point)
-    == Ok(locate_in(rings, point) != Outside)
+    let polygon = geokit.Polygon(rings)
+    contains_point(point, in: polygon) == Ok(locate_in(rings, point) != Outside)
   })
 }
 
@@ -222,10 +223,7 @@ pub fn pbt_contains_is_locate_with_boundary_test() -> Nil {
 pub fn pbt_single_member_multipolygon_matches_polygon_test() -> Nil {
   metamon.forall(generator.tuple2(rings_gen(), grid_point_gen()), fn(input) {
     let #(rings, point) = input
-    point_in_polygon.locate(
-      geometry: geometry.MultiPolygon([rings]),
-      point: point,
-    )
+    geokit.locate(point, in: geokit.MultiPolygon([rings]))
     == Ok(locate_in(rings, point))
   })
 }
@@ -235,11 +233,11 @@ pub fn pbt_multipolygon_contains_is_union_test() -> Nil {
     generator.tuple3(rings_gen(), rings_gen(), grid_point_gen()),
     fn(input) {
       let #(first, second, point) = input
-      let union = geometry.MultiPolygon([first, second])
+      let union = geokit.MultiPolygon([first, second])
       let expected =
         locate_in(first, point) != Outside
         || locate_in(second, point) != Outside
-      point_in_polygon.contains(geometry: union, point: point) == Ok(expected)
+      contains_point(point, in: union) == Ok(expected)
     },
   )
 }
@@ -249,14 +247,8 @@ pub fn pbt_multipolygon_member_order_invariant_test() -> Nil {
     generator.tuple3(rings_gen(), rings_gen(), grid_point_gen()),
     fn(input) {
       let #(first, second, point) = input
-      point_in_polygon.locate(
-        geometry: geometry.MultiPolygon([first, second]),
-        point: point,
-      )
-      == point_in_polygon.locate(
-        geometry: geometry.MultiPolygon([second, first]),
-        point: point,
-      )
+      geokit.locate(point, in: geokit.MultiPolygon([first, second]))
+      == geokit.locate(point, in: geokit.MultiPolygon([second, first]))
     },
   )
 }
@@ -270,11 +262,11 @@ type Rect {
 
 fn rect_ring(rect: Rect) -> List(LatLng) {
   [
-    latlng.new_or_panic(lat: rect.south, lng: rect.west),
-    latlng.new_or_panic(lat: rect.south, lng: rect.east),
-    latlng.new_or_panic(lat: rect.north, lng: rect.east),
-    latlng.new_or_panic(lat: rect.north, lng: rect.west),
-    latlng.new_or_panic(lat: rect.south, lng: rect.west),
+    geokit.wrap_lat_lng(latitude: rect.south, longitude: rect.west),
+    geokit.wrap_lat_lng(latitude: rect.south, longitude: rect.east),
+    geokit.wrap_lat_lng(latitude: rect.north, longitude: rect.east),
+    geokit.wrap_lat_lng(latitude: rect.north, longitude: rect.west),
+    geokit.wrap_lat_lng(latitude: rect.south, longitude: rect.west),
   ]
 }
 
@@ -301,13 +293,13 @@ fn hole_gen() -> Generator(Rect) {
 
 fn probe_gen() -> Generator(LatLng) {
   generator.map2(whole_degrees(-45, 45), whole_degrees(-85, 85), fn(lat, lng) {
-    latlng.new_or_panic(lat: lat, lng: lng)
+    geokit.wrap_lat_lng(latitude: lat, longitude: lng)
   })
 }
 
 fn rect_location(rect: Rect, point: LatLng) -> Location {
-  let lat = latlng.lat(point)
-  let lng = latlng.lng(point)
+  let lat = geokit.latitude(point)
+  let lng = geokit.longitude(point)
   let in_lat = rect.south <=. lat && lat <=. rect.north
   let in_lng = rect.west <=. lng && lng <=. rect.east
   let on_edge =
@@ -364,13 +356,13 @@ pub fn pbt_diamond_matches_oracle_test() -> Nil {
     ),
     fn(input) {
       let #(centre, radius, delta) = input
-      let lat = latlng.lat(centre)
-      let lng = latlng.lng(centre)
+      let lat = geokit.latitude(centre)
+      let lng = geokit.longitude(centre)
       let ring = [
-        latlng.new_or_panic(lat: lat -. radius, lng: lng),
-        latlng.new_or_panic(lat: lat, lng: lng +. radius),
-        latlng.new_or_panic(lat: lat +. radius, lng: lng),
-        latlng.new_or_panic(lat: lat, lng: lng -. radius),
+        geokit.wrap_lat_lng(latitude: lat -. radius, longitude: lng),
+        geokit.wrap_lat_lng(latitude: lat, longitude: lng +. radius),
+        geokit.wrap_lat_lng(latitude: lat +. radius, longitude: lng),
+        geokit.wrap_lat_lng(latitude: lat, longitude: lng -. radius),
       ]
       let point = translate_by(delta)(centre)
       let manhattan =
@@ -383,4 +375,19 @@ pub fn pbt_diamond_matches_oracle_test() -> Nil {
       locate_in([ring], point) == expected
     },
   )
+}
+
+// --- API adapters ----------------------------------------------------------
+
+fn contains_point(
+  point: LatLng,
+  in geometry: geokit.Geometry,
+) -> Result(Bool, Nil) {
+  geokit.locate(point, in: geometry)
+  |> result.map(fn(location) { location != geokit.Outside })
+}
+
+fn bbox(geometry: geokit.Geometry) -> Result(#(LatLng, LatLng), Nil) {
+  geokit.bounding_box(geometry)
+  |> result.map(fn(box) { #(box.south_west, box.north_east) })
 }

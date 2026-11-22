@@ -16,7 +16,7 @@ import gleam/list
 import gleam/result
 import gleam/string
 
-import geokit/latlng.{type LatLng}
+import geokit.{type LatLng}
 
 /// Errors returned by [`encode_with`](#encode_with), [`decode`](#decode),
 /// and [`decode_with`](#decode_with).
@@ -47,9 +47,9 @@ pub type PolylineError {
 /// import geokit/polyline
 /// import geokit/latlng
 ///
-/// let assert Ok(p1) = latlng.new(lat: 38.5, lng: -120.2)
-/// let assert Ok(p2) = latlng.new(lat: 40.7, lng: -120.95)
-/// let assert Ok(p3) = latlng.new(lat: 43.252, lng: -126.453)
+/// let assert Ok(p1) = geokit.lat_lng(latitude: 38.5, longitude: -120.2)
+/// let assert Ok(p2) = geokit.lat_lng(latitude: 40.7, longitude: -120.95)
+/// let assert Ok(p3) = geokit.lat_lng(latitude: 43.252, longitude: -126.453)
 /// polyline.encode([p1, p2, p3])
 /// // == "_p~iF~ps|U_ulLnnqC_mqNvxq`@"
 /// ```
@@ -101,8 +101,8 @@ fn encode_loop(
   case points {
     [] -> string.from_utf_codepoints(list.reverse(acc))
     [head, ..tail] -> {
-      let lat_scaled = float.round(latlng.lat(head) *. factor)
-      let lng_scaled = float.round(latlng.lng(head) *. factor)
+      let lat_scaled = float.round(geokit.latitude(head) *. factor)
+      let lng_scaled = float.round(geokit.longitude(head) *. factor)
       let acc =
         encode_signed(value: lat_scaled - last_lat, table: table, acc: acc)
       let acc =
@@ -209,7 +209,7 @@ pub fn decode_with(
       let #(lat_int, lng_int) = scaled
       let lat = int.to_float(lat_int) /. factor
       let lng = int.to_float(lng_int) /. factor
-      latlng.wrap(lat: lat, lng: lng)
+      geokit.wrap_lat_lng(latitude: lat, longitude: lng)
     }),
   )
 }

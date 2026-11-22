@@ -29,8 +29,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 
-import geokit/geometry.{type Geometry}
-import geokit/latlng.{type LatLng}
+import geokit.{type Geometry, type LatLng}
 
 // --- Public types --------------------------------------------------------
 
@@ -52,7 +51,7 @@ pub type GeoJsonError {
   InvalidPosition(coords: List(Float))
   /// A coordinate pair was structurally valid but the values fell
   /// outside the documented domain of `latlng.new`.
-  InvalidLatLng(error: latlng.LatLngError)
+  InvalidLatLng(error: geokit.LatLngError)
   /// A Polygon (or `MultiPolygon` sub-polygon) failed an RFC 7946
   /// §3.1.6 invariant. The accompanying `reason` names the specific
   /// violation: a Polygon with no rings, a ring with fewer than four
@@ -86,8 +85,8 @@ pub type Feature(properties) {
 /// import geokit/geometry
 /// import geokit/latlng
 ///
-/// let assert Ok(p) = latlng.new(lat: 35.0, lng: 139.0)
-/// geojson.encode_geometry(geometry: geometry.Point(p))
+/// let assert Ok(p) = geokit.lat_lng(latitude: 35.0, longitude: 139.0)
+/// geojson.encode_geometry(geometry: geokit.Point(p))
 /// // == "{\"type\":\"Point\",\"coordinates\":[139.0,35.0]}"
 /// ```
 pub fn encode_geometry(geometry geometry: Geometry) -> String {
@@ -148,20 +147,21 @@ pub fn decode_feature_collection(
 
 fn geometry_to_json(g: Geometry) -> Json {
   case g {
-    geometry.Point(p) -> object_with_coords("Point", position_to_json(p))
-    geometry.MultiPoint(points) ->
+    geokit.Point(p) -> object_with_coords("Point", position_to_json(p))
+    geokit.MultiPoint(points) ->
       object_with_coords(
         "MultiPoint",
         json.preprocessed_array(list.map(points, position_to_json)),
       )
-    geometry.LineString(points) ->
+    geokit.LineString(points) ->
       object_with_coords(
         "LineString",
         json.preprocessed_array(list.map(points, position_to_json)),
       )
-    geometry.Polygon(rings) ->
-      object_with_coords("Polygon", rings_to_json(rings))
-    geometry.MultiPolygon(polygons) ->
+    geokit.MultiLineString(lines) ->
+      object_with_coords("MultiLineString", rings_to_json(lines))
+    geokit.Polygon(rings) -> object_with_coords("Polygon", rings_to_json(rings))
+    geokit.MultiPolygon(polygons) ->
       object_with_coords(
         "MultiPolygon",
         json.preprocessed_array(list.map(polygons, rings_to_json)),
@@ -180,8 +180,8 @@ fn rings_to_json(rings: List(List(LatLng))) -> Json {
 fn position_to_json(p: LatLng) -> Json {
   // GeoJSON order: [longitude, latitude].
   json.preprocessed_array([
-    json.float(latlng.lng(p)),
-    json.float(latlng.lat(p)),
+    json.float(geokit.longitude(p)),
+    json.float(geokit.latitude(p)),
   ])
 }
 
@@ -289,8 +289,17 @@ fn geometry_decoder() -> Decoder(Result(Geometry, GeoJsonError)) {
       )
       decode.success(raw_multi_polygon_to_geometry(coords))
     }
-    "MultiLineString" | "GeometryCollection" ->
-      decode.success(Error(UnsupportedType(type_)))
+    "MultiLineString" -> {
+      use coords <- decode.field(
+        "coordinates",
+        decode.list(decode.list(decode.list(number_decoder()))),
+      )
+      decode.success(
+        list.try_map(coords, list.try_map(_, parse_position))
+        |> result.map(geokit.MultiLineString),
+      )
+    }
+    "GeometryCollection" -> decode.success(Error(UnsupportedType(type_)))
     other -> decode.success(Error(UnknownType(other)))
   }
 }
@@ -318,35 +327,35 @@ fn raw_point_to_geometry(
   coords: List(Float),
 ) -> Result(Geometry, GeoJsonError) {
   use point <- result.map(parse_position(coords))
-  geometry.Point(point)
+  geokit.Point(point)
 }
 
 fn raw_line_string_to_geometry(
   coords: List(List(Float)),
 ) -> Result(Geometry, GeoJsonError) {
   use points <- result.map(list.try_map(coords, parse_position))
-  geometry.LineString(points)
+  geokit.LineString(points)
 }
 
 fn raw_multi_point_to_geometry(
   coords: List(List(Float)),
 ) -> Result(Geometry, GeoJsonError) {
   use points <- result.map(list.try_map(coords, parse_position))
-  geometry.MultiPoint(points)
+  geokit.MultiPoint(points)
 }
 
 fn raw_polygon_to_geometry(
   coords: List(List(List(Float))),
 ) -> Result(Geometry, GeoJsonError) {
   use rings <- result.map(parse_rings(coords))
-  geometry.Polygon(rings)
+  geokit.Polygon(rings)
 }
 
 fn raw_multi_polygon_to_geometry(
   coords: List(List(List(List(Float)))),
 ) -> Result(Geometry, GeoJsonError) {
   use polygons <- result.map(list.try_map(coords, parse_rings))
-  geometry.MultiPolygon(polygons)
+  geokit.MultiPolygon(polygons)
 }
 
 fn parse_rings(
@@ -368,7 +377,7 @@ fn parse_rings(
 fn check_linear_ring(ring: List(LatLng)) -> Result(Nil, GeoJsonError) {
   case ring, list.last(ring) {
     [first, _, _, _, ..], Ok(last) ->
-      case latlng.equal(first, last) {
+      case first == last {
         True -> Ok(Nil)
         False ->
           Error(InvalidPolygon(
@@ -391,7 +400,7 @@ fn parse_position(coords: List(Float)) -> Result(LatLng, GeoJsonError) {
 }
 
 fn wrap_position(lng: Float, lat: Float) -> Result(LatLng, GeoJsonError) {
-  latlng.new(lat: lat, lng: lng)
+  geokit.lat_lng(latitude: lat, longitude: lng)
   |> result.map_error(InvalidLatLng)
 }
 

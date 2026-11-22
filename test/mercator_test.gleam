@@ -1,6 +1,6 @@
 import gleeunit/should
 
-import geokit/latlng
+import geokit
 import geokit/mercator
 
 fn approx_equal(a: Float, b: Float, tolerance: Float) -> Bool {
@@ -53,7 +53,7 @@ pub fn tile_each_coord_bound_is_checked_test() -> Nil {
 }
 
 pub fn from_lat_lng_zoom_out_of_range_test() -> Nil {
-  let assert Ok(origin) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(origin) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
   mercator.from_lat_lng(point: origin, zoom: -1)
   |> should.equal(Error(mercator.ZoomOutOfRange(zoom: -1)))
   mercator.from_lat_lng(point: origin, zoom: 31)
@@ -64,7 +64,7 @@ pub fn from_lat_lng_zoom_out_of_range_test() -> Nil {
 
 pub fn origin_at_zoom_zero_test() -> Nil {
   // The single tile at zoom 0 covers the whole world.
-  let assert Ok(origin) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(origin) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
   let assert Ok(t) = mercator.from_lat_lng(point: origin, zoom: 0)
   mercator.x(tile: t)
   |> should.equal(0)
@@ -75,7 +75,7 @@ pub fn origin_at_zoom_zero_test() -> Nil {
 pub fn known_tile_at_zoom_2_test() -> Nil {
   // Tokyo (35.68, 139.77) at zoom 2 lies in tile (3, 1) — east hemisphere
   // upper-middle quadrant.
-  let assert Ok(tokyo) = latlng.new(lat: 35.68, lng: 139.77)
+  let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.68, longitude: 139.77)
   let assert Ok(t) = mercator.from_lat_lng(point: tokyo, zoom: 2)
   mercator.zoom(tile: t)
   |> should.equal(2)
@@ -88,18 +88,18 @@ pub fn known_tile_at_zoom_2_test() -> Nil {
 pub fn lat_lng_round_trip_test() -> Nil {
   // For a point at the tile centre, projecting to a tile then back
   // recovers a point inside the same tile.
-  let assert Ok(point) = latlng.new(lat: 35.68, lng: 139.77)
+  let assert Ok(point) = geokit.lat_lng(latitude: 35.68, longitude: 139.77)
   let assert Ok(t) = mercator.from_lat_lng(point: point, zoom: 10)
   let nw = mercator.to_lat_lng(tile: t)
   let #(sw, ne) = mercator.bounds(tile: t)
   // The original point should lie inside the tile's bounding box.
-  { latlng.lat(point) <=. latlng.lat(nw) }
+  { geokit.latitude(point) <=. geokit.latitude(nw) }
   |> should.be_true
-  { latlng.lat(point) >=. latlng.lat(sw) }
+  { geokit.latitude(point) >=. geokit.latitude(sw) }
   |> should.be_true
-  { latlng.lng(point) >=. latlng.lng(sw) }
+  { geokit.longitude(point) >=. geokit.longitude(sw) }
   |> should.be_true
-  { latlng.lng(point) <=. latlng.lng(ne) }
+  { geokit.longitude(point) <=. geokit.longitude(ne) }
   |> should.be_true
 }
 
@@ -107,16 +107,16 @@ pub fn tile_to_lat_lng_origin_test() -> Nil {
   // Tile (0,0,0) NW corner is roughly (85.05, -180).
   let assert Ok(t) = mercator.new(zoom: 0, x: 0, y: 0)
   let nw = mercator.to_lat_lng(tile: t)
-  approx_equal(latlng.lng(nw), -180.0, 0.001)
+  approx_equal(geokit.longitude(nw), -180.0, 0.001)
   |> should.be_true
-  approx_equal(latlng.lat(nw), 85.05112878, 0.001)
+  approx_equal(geokit.latitude(nw), 85.05112878, 0.001)
   |> should.be_true
 }
 
 pub fn lat_lng_clamps_at_poles_test() -> Nil {
   // Latitudes beyond the Mercator clip should still produce a valid
   // tile (the function clamps rather than errors).
-  let assert Ok(north) = latlng.new(lat: 89.9, lng: 0.0)
+  let assert Ok(north) = geokit.lat_lng(latitude: 89.9, longitude: 0.0)
   let assert Ok(t) = mercator.from_lat_lng(point: north, zoom: 5)
   mercator.zoom(tile: t)
   |> should.equal(5)
@@ -172,7 +172,7 @@ pub fn quadkey_empty_decodes_to_zoom_zero_root_test() -> Nil {
 }
 
 pub fn quadkey_zoom_zero_round_trip_test() -> Nil {
-  let assert Ok(ll) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(ll) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
   let assert Ok(tile) = mercator.from_lat_lng(point: ll, zoom: 0)
   let qk = mercator.to_quadkey(tile: tile)
   qk

@@ -20,7 +20,7 @@ import gleam/string
 
 import gleam_community/maths
 
-import geokit/latlng.{type LatLng}
+import geokit.{type LatLng}
 
 /// A tile identified by its zoom level and `(x, y)` coordinates.
 /// `pub opaque`; build through [`tile`](#tile) and inspect through
@@ -92,8 +92,8 @@ pub fn from_lat_lng(
   )
   let pole_limit = 85.051_128_78
   let lat =
-    float.clamp(latlng.lat(point), min: 0.0 -. pole_limit, max: pole_limit)
-  let lng = latlng.lng(point)
+    float.clamp(geokit.latitude(point), min: 0.0 -. pole_limit, max: pole_limit)
+  let lng = geokit.longitude(point)
   let n = int.to_float(int.bitwise_shift_left(1, zoom))
   let lat_rad = maths.degrees_to_radians(lat)
   let x_float = { lng +. 180.0 } /. 360.0 *. n
@@ -116,8 +116,16 @@ pub fn to_lat_lng(tile tile: Tile) -> LatLng {
 pub fn bounds(tile tile: Tile) -> #(LatLng, LatLng) {
   let nw = corner_lat_lng(zoom: tile.zoom, x: tile.x, y: tile.y)
   let se = corner_lat_lng(zoom: tile.zoom, x: tile.x + 1, y: tile.y + 1)
-  let sw = latlng.wrap(lat: latlng.lat(se), lng: latlng.lng(nw))
-  let ne = latlng.wrap(lat: latlng.lat(nw), lng: latlng.lng(se))
+  let sw =
+    geokit.wrap_lat_lng(
+      latitude: geokit.latitude(se),
+      longitude: geokit.longitude(nw),
+    )
+  let ne =
+    geokit.wrap_lat_lng(
+      latitude: geokit.latitude(nw),
+      longitude: geokit.longitude(se),
+    )
   #(sw, ne)
 }
 
@@ -127,7 +135,7 @@ fn corner_lat_lng(zoom zoom: Int, x x: Int, y y: Int) -> LatLng {
   let lat_rad =
     maths.atan(maths.sinh(maths.pi() *. { 1.0 -. 2.0 *. int.to_float(y) /. n }))
   let lat = maths.radians_to_degrees(lat_rad)
-  latlng.wrap(lat: lat, lng: lng)
+  geokit.wrap_lat_lng(latitude: lat, longitude: lng)
 }
 
 // --- Quadkey ------------------------------------------------------------

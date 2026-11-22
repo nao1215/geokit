@@ -8,21 +8,15 @@ import gleam/dynamic/decode
 import gleam/json
 import gleam/list
 import gleam/option.{None}
+import gleam/result
 import gleam/string
 import gleeunit/should
 
-import geokit/bbox
-import geokit/bearing
-import geokit/centroid
-import geokit/distance
+import geokit.{type LatLng}
 import geokit/geohash
 import geokit/geojson
-import geokit/geometry
-import geokit/latlng
 import geokit/mercator
-import geokit/point_in_polygon
 import geokit/polyline
-import geokit/simplify
 
 // --- helpers -------------------------------------------------------------
 
@@ -37,11 +31,11 @@ fn close_to(actual: Float, expected: Float, tolerance: Float) -> Bool {
 // --- Haversine distance and initial bearing -----------------------------
 
 pub fn tokyo_to_osaka() -> #(Float, Float) {
-  let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(osaka) = latlng.new(lat: 34.6937, lng: 135.5023)
+  let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  let assert Ok(osaka) = geokit.lat_lng(latitude: 34.6937, longitude: 135.5023)
   #(
-    distance.haversine(a: tokyo, b: osaka),
-    bearing.initial(from: tokyo, to: osaka),
+    geokit.distance(from: tokyo, to: osaka),
+    geokit.initial_bearing(from: tokyo, to: osaka),
   )
 }
 
@@ -55,8 +49,8 @@ pub fn readme_tokyo_to_osaka_test() -> Nil {
 // --- latlng.wrap normalisation -----------------------------------------
 
 pub fn antimeridian_wrap() -> #(Float, Float) {
-  let point = latlng.wrap(lat: 91.0, lng: 181.0)
-  #(latlng.lat(point), latlng.lng(point))
+  let point = geokit.wrap_lat_lng(latitude: 91.0, longitude: 181.0)
+  #(geokit.latitude(point), geokit.longitude(point))
 }
 
 pub fn readme_antimeridian_wrap_test() -> Nil {
@@ -65,8 +59,8 @@ pub fn readme_antimeridian_wrap_test() -> Nil {
 
 // --- Geohash encode, decode, neighbours --------------------------------
 
-pub fn around_tokyo() -> #(String, latlng.LatLng, geohash.Neighbors) {
-  let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
+pub fn around_tokyo() -> #(String, geokit.LatLng, geohash.Neighbors) {
+  let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(hash) = geohash.encode(point: tokyo, precision: 8)
   let assert Ok(centre) = geohash.decode(hash: hash)
   let assert Ok(neighbours) = geohash.neighbors(hash: hash)
@@ -80,8 +74,8 @@ pub fn readme_around_tokyo_test() -> Nil {
   // The centre is the geohash cell's midpoint — close to but not
   // identical to Tokyo; precision 8 is ~38 m × 19 m, so this
   // tolerance is conservative.
-  close_to(latlng.lat(centre), 35.6812, 0.001) |> should.be_true
-  close_to(latlng.lng(centre), 139.7671, 0.001) |> should.be_true
+  close_to(geokit.latitude(centre), 35.6812, 0.001) |> should.be_true
+  close_to(geokit.longitude(centre), 139.7671, 0.001) |> should.be_true
   // The README claims `neighbors` returns all eight directions.
   // Each direction must yield a hash of the same length.
   let prec = 8
@@ -98,9 +92,9 @@ fn string_length_check(s: String, target: Int) -> Bool {
 // --- Polyline encode + decode ------------------------------------------
 
 pub fn route() -> #(String, Int) {
-  let assert Ok(p1) = latlng.new(lat: 38.5, lng: -120.2)
-  let assert Ok(p2) = latlng.new(lat: 40.7, lng: -120.95)
-  let assert Ok(p3) = latlng.new(lat: 43.252, lng: -126.453)
+  let assert Ok(p1) = geokit.lat_lng(latitude: 38.5, longitude: -120.2)
+  let assert Ok(p2) = geokit.lat_lng(latitude: 40.7, longitude: -120.95)
+  let assert Ok(p3) = geokit.lat_lng(latitude: 43.252, longitude: -126.453)
   let encoded = polyline.encode(points: [p1, p2, p3])
   let assert Ok(decoded) = polyline.decode(input: encoded)
   #(encoded, list.length(decoded))
@@ -136,10 +130,10 @@ fn city_decoder() -> decode.Decoder(City) {
 // `Nil` return is intentional so the snippet stays readable in the
 // docs.
 pub fn round_trip() -> Nil {
-  let assert Ok(p) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let feature =
     geojson.Feature(
-      geometry: geometry.Point(p),
+      geometry: geokit.Point(p),
       properties: City(name: "Tokyo", population: 13_960_000),
       id: None,
     )
@@ -153,10 +147,10 @@ pub fn round_trip() -> Nil {
 // Internal variant returning the decoded value so the test can
 // inspect it. Not exported; not part of the README.
 fn round_trip_inspect() -> geojson.Feature(City) {
-  let assert Ok(p) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let feature =
     geojson.Feature(
-      geometry: geometry.Point(p),
+      geometry: geokit.Point(p),
       properties: City(name: "Tokyo", population: 13_960_000),
       id: None,
     )
@@ -174,9 +168,9 @@ pub fn readme_geojson_round_trip_test() -> Nil {
   let f = round_trip_inspect()
   f.properties |> should.equal(City("Tokyo", 13_960_000))
   case f.geometry {
-    geometry.Point(p) -> {
-      latlng.lat(p) |> should.equal(35.6812)
-      latlng.lng(p) |> should.equal(139.7671)
+    geokit.Point(p) -> {
+      geokit.latitude(p) |> should.equal(35.6812)
+      geokit.longitude(p) |> should.equal(139.7671)
     }
     _ -> should.be_true(False)
   }
@@ -199,7 +193,7 @@ pub fn readme_parse_collection_test() -> Nil {
 // --- Web Mercator tile and Bing quadkey -------------------------------
 
 pub fn tokyo_tile_at_zoom_5() -> #(Int, Int, String) {
-  let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(tile) = mercator.from_lat_lng(point: tokyo, zoom: 5)
   #(
     mercator.x(tile: tile),
@@ -217,29 +211,28 @@ pub fn readme_tokyo_tile_at_zoom_5_test() -> Nil {
 // --- bbox / centroid / simplify ----------------------------------------
 
 pub fn polygon_ops() {
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: 10.0)
-  let assert Ok(c) = latlng.new(lat: 10.0, lng: 10.0)
-  let assert Ok(d) = latlng.new(lat: 10.0, lng: 0.0)
-  let polygon = geometry.Polygon([[a, b, c, d, a]])
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 10.0)
+  let assert Ok(c) = geokit.lat_lng(latitude: 10.0, longitude: 10.0)
+  let assert Ok(d) = geokit.lat_lng(latitude: 10.0, longitude: 0.0)
+  let polygon = geokit.Polygon([[a, b, c, d, a]])
 
-  let assert Ok(#(sw, ne)) = bbox.compute(geometry: polygon)
-  let assert Ok(centre) = centroid.compute(geometry: polygon)
-  let assert Ok(reduced) =
-    simplify.line_string(points: [a, b, c, d], tolerance: 0.001)
+  let assert Ok(#(sw, ne)) = bbox(polygon)
+  let assert Ok(centre) = geokit.centroid(polygon)
+  let assert Ok(reduced) = simplify_line([a, b, c, d], tolerance: 0.001)
   #(sw, ne, centre, reduced)
 }
 
 pub fn readme_polygon_ops_test() -> Nil {
   let #(sw, ne, centre, reduced) = polygon_ops()
-  latlng.lat(sw) |> should.equal(0.0)
-  latlng.lng(sw) |> should.equal(0.0)
-  latlng.lat(ne) |> should.equal(10.0)
-  latlng.lng(ne) |> should.equal(10.0)
+  geokit.latitude(sw) |> should.equal(0.0)
+  geokit.longitude(sw) |> should.equal(0.0)
+  geokit.latitude(ne) |> should.equal(10.0)
+  geokit.longitude(ne) |> should.equal(10.0)
   // The signed-area centroid of an axis-aligned 10 × 10 square is
   // at its geometric centre.
-  latlng.lat(centre) |> should.equal(5.0)
-  latlng.lng(centre) |> should.equal(5.0)
+  geokit.latitude(centre) |> should.equal(5.0)
+  geokit.longitude(centre) |> should.equal(5.0)
   // Douglas-Peucker on a square at very small tolerance keeps every
   // corner (no two points are collinear within 0.001°).
   list.length(reduced) |> should.equal(4)
@@ -249,38 +242,58 @@ pub fn readme_polygon_ops_test() -> Nil {
 
 pub fn park_and_lake() {
   let park = [
-    latlng.new_or_panic(lat: 0.0, lng: 0.0),
-    latlng.new_or_panic(lat: 0.0, lng: 10.0),
-    latlng.new_or_panic(lat: 10.0, lng: 10.0),
-    latlng.new_or_panic(lat: 10.0, lng: 0.0),
-    latlng.new_or_panic(lat: 0.0, lng: 0.0),
+    geokit.wrap_lat_lng(latitude: 0.0, longitude: 0.0),
+    geokit.wrap_lat_lng(latitude: 0.0, longitude: 10.0),
+    geokit.wrap_lat_lng(latitude: 10.0, longitude: 10.0),
+    geokit.wrap_lat_lng(latitude: 10.0, longitude: 0.0),
+    geokit.wrap_lat_lng(latitude: 0.0, longitude: 0.0),
   ]
   let lake = [
-    latlng.new_or_panic(lat: 4.0, lng: 4.0),
-    latlng.new_or_panic(lat: 4.0, lng: 6.0),
-    latlng.new_or_panic(lat: 6.0, lng: 6.0),
-    latlng.new_or_panic(lat: 6.0, lng: 4.0),
-    latlng.new_or_panic(lat: 4.0, lng: 4.0),
+    geokit.wrap_lat_lng(latitude: 4.0, longitude: 4.0),
+    geokit.wrap_lat_lng(latitude: 4.0, longitude: 6.0),
+    geokit.wrap_lat_lng(latitude: 6.0, longitude: 6.0),
+    geokit.wrap_lat_lng(latitude: 6.0, longitude: 4.0),
+    geokit.wrap_lat_lng(latitude: 4.0, longitude: 4.0),
   ]
-  let polygon = geometry.Polygon([park, lake])
+  let polygon = geokit.Polygon([park, lake])
 
-  let bench = latlng.new_or_panic(lat: 2.0, lng: 2.0)
-  let boat = latlng.new_or_panic(lat: 5.0, lng: 5.0)
-  let gate = latlng.new_or_panic(lat: 0.0, lng: 5.0)
+  let bench = geokit.wrap_lat_lng(latitude: 2.0, longitude: 2.0)
+  let boat = geokit.wrap_lat_lng(latitude: 5.0, longitude: 5.0)
+  let gate = geokit.wrap_lat_lng(latitude: 0.0, longitude: 5.0)
   #(
-    point_in_polygon.contains(geometry: polygon, point: bench),
-    point_in_polygon.contains(geometry: polygon, point: boat),
-    point_in_polygon.contains(geometry: polygon, point: gate),
-    point_in_polygon.locate(geometry: polygon, point: gate),
+    contains_point(bench, in: polygon),
+    contains_point(boat, in: polygon),
+    contains_point(gate, in: polygon),
+    geokit.locate(gate, in: polygon),
   )
 }
 
 pub fn readme_park_and_lake_test() -> Nil {
   park_and_lake()
-  |> should.equal(#(
-    Ok(True),
-    Ok(False),
-    Ok(True),
-    Ok(point_in_polygon.OnBoundary),
-  ))
+  |> should.equal(#(Ok(True), Ok(False), Ok(True), Ok(geokit.OnBoundary)))
+}
+
+// --- API adapters ----------------------------------------------------------
+
+fn contains_point(
+  point: LatLng,
+  in geometry: geokit.Geometry,
+) -> Result(Bool, Nil) {
+  geokit.locate(point, in: geometry)
+  |> result.map(fn(location) { location != geokit.Outside })
+}
+
+fn bbox(geometry: geokit.Geometry) -> Result(#(LatLng, LatLng), Nil) {
+  geokit.bounding_box(geometry)
+  |> result.map(fn(box) { #(box.south_west, box.north_east) })
+}
+
+fn simplify_line(
+  points: List(LatLng),
+  tolerance tolerance: Float,
+) -> Result(List(LatLng), Nil) {
+  case geokit.simplify(geokit.LineString(points), tolerance:) {
+    Ok(geokit.LineString(simplified)) -> Ok(simplified)
+    _ -> Error(Nil)
+  }
 }

@@ -14,7 +14,7 @@ import gleam/list
 import gleam/result
 import gleam/string
 
-import geokit/latlng.{type LatLng}
+import geokit.{type LatLng}
 
 const base32_alphabet: String = "0123456789bcdefghjkmnpqrstuvwxyz"
 
@@ -75,7 +75,7 @@ pub type Neighbors {
 /// import geokit/geohash
 /// import geokit/latlng
 ///
-/// let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
+/// let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
 /// let assert Ok(hash) = geohash.encode(point: tokyo, precision: 8)
 /// // hash == "xn76urx4"
 /// ```
@@ -89,8 +89,8 @@ pub fn encode(
   )
   let bits =
     encode_bits(
-      current: #(latlng.lng(point), #(-180.0, 180.0)),
-      other: #(latlng.lat(point), #(-90.0, 90.0)),
+      current: #(geokit.longitude(point), #(-180.0, 180.0)),
+      other: #(geokit.latitude(point), #(-90.0, 90.0)),
       remaining: precision * 5,
       acc: [],
     )
@@ -159,9 +159,9 @@ fn bits_to_base32(bits: List(Int), acc: String) -> String {
 /// ```
 pub fn decode(hash hash: String) -> Result(LatLng, GeohashError) {
   use #(sw, ne) <- result.try(decode_bounds(hash: hash))
-  let lat = { latlng.lat(sw) +. latlng.lat(ne) } /. 2.0
-  let lng = { latlng.lng(sw) +. latlng.lng(ne) } /. 2.0
-  Ok(latlng.wrap(lat: lat, lng: lng))
+  let lat = { geokit.latitude(sw) +. geokit.latitude(ne) } /. 2.0
+  let lng = { geokit.longitude(sw) +. geokit.longitude(ne) } /. 2.0
+  Ok(geokit.wrap_lat_lng(latitude: lat, longitude: lng))
 }
 
 /// Decode a geohash to the south-west and north-east corners of its
@@ -190,8 +190,8 @@ pub fn decode_bounds(
     _ -> #(other_axis, last_axis)
   }
   Ok(#(
-    latlng.wrap(lat: lat_min, lng: lng_min),
-    latlng.wrap(lat: lat_max, lng: lng_max),
+    geokit.wrap_lat_lng(latitude: lat_min, longitude: lng_min),
+    geokit.wrap_lat_lng(latitude: lat_max, longitude: lng_max),
   ))
 }
 

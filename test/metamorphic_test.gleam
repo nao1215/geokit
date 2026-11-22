@@ -23,11 +23,8 @@ import metamon/generator/range
 import metamon/relation
 import metamon/transform
 
-import geokit/bearing
-import geokit/distance
-import geokit/latlng.{type LatLng}
+import geokit.{type LatLng}
 import geokit/mercator
-import geokit/simplify
 
 type Pair =
   #(LatLng, LatLng)
@@ -36,7 +33,7 @@ fn point() -> generator.Generator(LatLng) {
   generator.map2(
     generator.float(-90.0, 90.0),
     generator.float(-180.0, 180.0),
-    fn(lat, lng) { latlng.wrap(lat: lat, lng: lng) },
+    fn(lat, lng) { geokit.wrap_lat_lng(latitude: lat, longitude: lng) },
   )
 }
 
@@ -45,15 +42,24 @@ fn pair() -> generator.Generator(Pair) {
 }
 
 fn shift_lng(p: LatLng, by: Float) -> LatLng {
-  latlng.wrap(lat: latlng.lat(p), lng: latlng.lng(p) +. by)
+  geokit.wrap_lat_lng(
+    latitude: geokit.latitude(p),
+    longitude: geokit.longitude(p) +. by,
+  )
 }
 
 fn mirror_lat(p: LatLng) -> LatLng {
-  latlng.wrap(lat: 0.0 -. latlng.lat(p), lng: latlng.lng(p))
+  geokit.wrap_lat_lng(
+    latitude: 0.0 -. geokit.latitude(p),
+    longitude: geokit.longitude(p),
+  )
 }
 
 fn mirror_lng(p: LatLng) -> LatLng {
-  latlng.wrap(lat: latlng.lat(p), lng: 0.0 -. latlng.lng(p))
+  geokit.wrap_lat_lng(
+    latitude: geokit.latitude(p),
+    longitude: 0.0 -. geokit.longitude(p),
+  )
 }
 
 fn both(f: fn(LatLng) -> LatLng) -> fn(Pair) -> Pair {
@@ -74,7 +80,9 @@ fn close_metres() -> relation.Relation(Float) {
 
 pub fn distance_is_invariant_under_shared_moves_test() -> Nil {
   let rel = close_metres()
-  let haversine = fn(input: Pair) { distance.haversine(a: input.0, b: input.1) }
+  let haversine = fn(input: Pair) {
+    geokit.distance(from: input.0, to: input.1)
+  }
   metamon.forall_morphs(
     pair(),
     [
@@ -128,17 +136,19 @@ fn bearing_pair() -> generator.Generator(Pair) {
     generator.map2(
       generator.float(-80.0, 80.0),
       generator.float(-180.0, 180.0),
-      fn(lat, lng) { latlng.wrap(lat: lat, lng: lng) },
+      fn(lat, lng) { geokit.wrap_lat_lng(latitude: lat, longitude: lng) },
     )
   generator.tuple2(p, p)
   |> generator.filter(fn(input) {
-    let d = distance.haversine(a: input.0, b: input.1)
+    let d = geokit.distance(from: input.0, to: input.1)
     d >. 1000.0 && d <. 1.99e7
   })
 }
 
 pub fn bearing_mirrors_with_the_points_test() -> Nil {
-  let initial = fn(input: Pair) { bearing.initial(from: input.0, to: input.1) }
+  let initial = fn(input: Pair) {
+    geokit.initial_bearing(from: input.0, to: input.1)
+  }
   let close =
     relation.new("same direction within 1e-6 degrees", fn(a, b) {
       angle_between(a, b) <=. 1.0e-6
@@ -191,7 +201,7 @@ fn is_subsequence(small: List(LatLng), of large: List(LatLng)) -> Bool {
     [], _ -> True
     _, [] -> False
     [s, ..small_rest], [l, ..large_rest] ->
-      case latlng.equal(a: s, b: l) {
+      case s == l {
         True -> is_subsequence(small_rest, of: large_rest)
         False -> is_subsequence(small, of: large_rest)
       }
@@ -204,7 +214,7 @@ pub fn larger_tolerance_keeps_a_subsequence_test() -> Nil {
       generator.map2(
         generator.float(-10.0, 10.0),
         generator.float(-10.0, 10.0),
-        fn(lat, lng) { latlng.wrap(lat: lat, lng: lng) },
+        fn(lat, lng) { geokit.wrap_lat_lng(latitude: lat, longitude: lng) },
       ),
       range.constant(0, 25),
     )
@@ -217,8 +227,8 @@ pub fn larger_tolerance_keeps_a_subsequence_test() -> Nil {
     fn(input) {
       let #(points, small, extra) = input
       case
-        simplify.line_string(points: points, tolerance: small),
-        simplify.line_string(points: points, tolerance: small +. extra)
+        simplify_line(points, tolerance: small),
+        simplify_line(points, tolerance: small +. extra)
       {
         Ok(fine), Ok(coarse) ->
           is_subsequence(coarse, of: fine)
@@ -227,4 +237,16 @@ pub fn larger_tolerance_keeps_a_subsequence_test() -> Nil {
       }
     },
   )
+}
+
+// --- API adapters ----------------------------------------------------------
+
+fn simplify_line(
+  points: List(LatLng),
+  tolerance tolerance: Float,
+) -> Result(List(LatLng), Nil) {
+  case geokit.simplify(geokit.LineString(points), tolerance:) {
+    Ok(geokit.LineString(simplified)) -> Ok(simplified)
+    _ -> Error(Nil)
+  }
 }

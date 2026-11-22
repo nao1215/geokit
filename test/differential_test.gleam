@@ -19,18 +19,13 @@
 
 import gleam/bool
 import gleam/list
+import gleam/result
 import gleeunit/should
 
-import geokit/bbox
-import geokit/bearing
-import geokit/centroid
-import geokit/distance
+import geokit.{type LatLng}
 import geokit/geohash
-import geokit/geometry
-import geokit/latlng
 import geokit/mercator
 import geokit/polyline
-import geokit/simplify
 
 // --- helpers --------------------------------------------------------------
 
@@ -64,15 +59,15 @@ fn int_to_float(n: Int) -> Float {
 fn build_curve(
   index: Int,
   count: Int,
-  acc: List(latlng.LatLng),
-) -> List(latlng.LatLng) {
+  acc: List(geokit.LatLng),
+) -> List(geokit.LatLng) {
   case index >= count {
     True -> list.reverse(acc)
     False -> {
       let f = int_to_float(index)
       let lat = 35.0 +. f *. 0.01
       let lng = 139.0 +. f *. 0.02
-      let assert Ok(p) = latlng.new(lat: lat, lng: lng)
+      let assert Ok(p) = geokit.lat_lng(latitude: lat, longitude: lng)
       build_curve(index + 1, count, [p, ..acc])
     }
   }
@@ -81,133 +76,141 @@ fn build_curve(
 // --- Distance: haversine vs Python math --------------------------------
 
 pub fn diff_distance_tokyo_osaka_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(b) = latlng.new(lat: 34.6937, lng: 135.5023)
+  let assert Ok(a) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  let assert Ok(b) = geokit.lat_lng(latitude: 34.6937, longitude: 135.5023)
   // Python: 402_784.7393766611
-  approx(distance.haversine(a: a, b: b), 402_784.7394, 0.001)
+  approx(geokit.distance(from: a, to: b), 402_784.7394, 0.001)
   |> should.be_true
 }
 
 pub fn diff_distance_tokyo_london_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(b) = latlng.new(lat: 51.5074, lng: -0.1278)
-  approx(distance.haversine(a: a, b: b), 9_562_311.1617, 0.001)
+  let assert Ok(a) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  let assert Ok(b) = geokit.lat_lng(latitude: 51.5074, longitude: -0.1278)
+  approx(geokit.distance(from: a, to: b), 9_562_311.1617, 0.001)
   |> should.be_true
 }
 
 pub fn diff_distance_tokyo_nyc_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(b) = latlng.new(lat: 40.7128, lng: -74.006)
-  approx(distance.haversine(a: a, b: b), 10_846_766.8037, 0.001)
+  let assert Ok(a) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  let assert Ok(b) = geokit.lat_lng(latitude: 40.7128, longitude: -74.006)
+  approx(geokit.distance(from: a, to: b), 10_846_766.8037, 0.001)
   |> should.be_true
 }
 
 pub fn diff_distance_tokyo_sydney_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(b) = latlng.new(lat: -33.8688, lng: 151.2093)
-  approx(distance.haversine(a: a, b: b), 7_824_522.5299, 0.001)
+  let assert Ok(a) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  let assert Ok(b) = geokit.lat_lng(latitude: -33.8688, longitude: 151.2093)
+  approx(geokit.distance(from: a, to: b), 7_824_522.5299, 0.001)
   |> should.be_true
 }
 
 pub fn diff_distance_equator_quarter_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: 90.0)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 90.0)
   // π/2 × R = 10_007_557.2204
-  approx(distance.haversine(a: a, b: b), 10_007_557.2204, 0.001)
+  approx(geokit.distance(from: a, to: b), 10_007_557.2204, 0.001)
   |> should.be_true
 }
 
 pub fn diff_distance_antipodes_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: 180.0)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 180.0)
   // π × R = 20_015_114.442_035_925
-  approx(distance.haversine(a: a, b: b), 20_015_114.442_035_925, 0.001)
+  approx(geokit.distance(from: a, to: b), 20_015_114.442_035_925, 0.001)
   |> should.be_true
 }
 
 pub fn diff_distance_pole_to_pole_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 90.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: -90.0, lng: 0.0)
-  approx(distance.haversine(a: a, b: b), 20_015_114.442_035_925, 0.001)
+  let assert Ok(a) = geokit.lat_lng(latitude: 90.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: -90.0, longitude: 0.0)
+  approx(geokit.distance(from: a, to: b), 20_015_114.442_035_925, 0.001)
   |> should.be_true
 }
 
 pub fn diff_distance_same_point_test() -> Nil {
-  let assert Ok(p) = latlng.new(lat: 35.6812, lng: 139.7671)
-  approx(distance.haversine(a: p, b: p), 0.0, 0.000_001)
+  let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  approx(geokit.distance(from: p, to: p), 0.0, 0.000_001)
   |> should.be_true
 }
 
 pub fn diff_distance_one_micro_degree_apart_test() -> Nil {
   // 11.12 cm at the equator. Python: 0.111195...
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: 0.000_001)
-  approx(distance.haversine(a: a, b: b), 0.111_195, 0.000_001)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 0.000_001)
+  approx(geokit.distance(from: a, to: b), 0.111_195, 0.000_001)
   |> should.be_true
 }
 
 pub fn diff_distance_across_antimeridian_short_test() -> Nil {
   // (0, 179.99) ↔ (0, -179.99) — 0.02° apart through the meridian.
   // Python: 2223.901604670649
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 179.99)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: -179.99)
-  approx(distance.haversine(a: a, b: b), 2223.901_604_670_649, 0.000_1)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 179.99)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: -179.99)
+  approx(geokit.distance(from: a, to: b), 2223.901_604_670_649, 0.000_1)
   |> should.be_true
 }
 
 // --- Bearing vs Python ---------------------------------------------------
 
 pub fn diff_bearing_tokyo_osaka_initial_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(b) = latlng.new(lat: 34.6937, lng: 135.5023)
+  let assert Ok(a) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  let assert Ok(b) = geokit.lat_lng(latitude: 34.6937, longitude: 135.5023)
   // Python: 255.4180_369378
-  bearing_approx(bearing.initial(from: a, to: b), 255.4180_369378, 0.000_001)
+  bearing_approx(
+    geokit.initial_bearing(from: a, to: b),
+    255.4180_369378,
+    0.000_001,
+  )
   |> should.be_true
 }
 
 pub fn diff_bearing_tokyo_osaka_final_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(b) = latlng.new(lat: 34.6937, lng: 135.5023)
+  let assert Ok(a) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  let assert Ok(b) = geokit.lat_lng(latitude: 34.6937, longitude: 135.5023)
   // Python: 252.9595_824228
-  bearing_approx(bearing.final(from: a, to: b), 252.9595_824228, 0.000_001)
+  bearing_approx(
+    geokit.final_bearing(from: a, to: b),
+    252.9595_824228,
+    0.000_001,
+  )
   |> should.be_true
 }
 
 pub fn diff_bearing_tokyo_nyc_initial_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(b) = latlng.new(lat: 40.7128, lng: -74.006)
+  let assert Ok(a) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  let assert Ok(b) = geokit.lat_lng(latitude: 40.7128, longitude: -74.006)
   // Python: 25.154
-  bearing_approx(bearing.initial(from: a, to: b), 25.154, 0.01)
+  bearing_approx(geokit.initial_bearing(from: a, to: b), 25.154, 0.01)
   |> should.be_true
 }
 
 pub fn diff_bearing_tokyo_sydney_initial_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(b) = latlng.new(lat: -33.8688, lng: 151.2093)
-  bearing_approx(bearing.initial(from: a, to: b), 169.9281, 0.01)
+  let assert Ok(a) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  let assert Ok(b) = geokit.lat_lng(latitude: -33.8688, longitude: 151.2093)
+  bearing_approx(geokit.initial_bearing(from: a, to: b), 169.9281, 0.01)
   |> should.be_true
 }
 
 pub fn diff_bearing_due_north_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 1.0, lng: 0.0)
-  bearing_approx(bearing.initial(from: a, to: b), 0.0, 0.000_001)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 1.0, longitude: 0.0)
+  bearing_approx(geokit.initial_bearing(from: a, to: b), 0.0, 0.000_001)
   |> should.be_true
 }
 
 pub fn diff_bearing_due_east_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: 1.0)
-  bearing_approx(bearing.initial(from: a, to: b), 90.0, 0.000_001)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 1.0)
+  bearing_approx(geokit.initial_bearing(from: a, to: b), 90.0, 0.000_001)
   |> should.be_true
 }
 
 pub fn diff_bearing_antipodes_no_crash_test() -> Nil {
   // Antipodal points: bearing is geometrically undefined but the
   // function must return a value in [0, 360) without crashing.
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: 180.0)
-  let value = bearing.initial(from: a, to: b)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 180.0)
+  let value = geokit.initial_bearing(from: a, to: b)
   let in_range = value >=. 0.0 && value <. 360.0
   in_range
   |> should.be_true
@@ -216,25 +219,25 @@ pub fn diff_bearing_antipodes_no_crash_test() -> Nil {
 // --- Geohash encode vs ngeohash -----------------------------------------
 
 pub fn diff_geohash_encode_tokyo_p5_test() -> Nil {
-  let assert Ok(p) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(hash) = geohash.encode(point: p, precision: 5)
   hash |> should.equal("xn76u")
 }
 
 pub fn diff_geohash_encode_tokyo_p7_test() -> Nil {
-  let assert Ok(p) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(hash) = geohash.encode(point: p, precision: 7)
   hash |> should.equal("xn76urx")
 }
 
 pub fn diff_geohash_encode_tokyo_p9_test() -> Nil {
-  let assert Ok(p) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(hash) = geohash.encode(point: p, precision: 9)
   hash |> should.equal("xn76urx61")
 }
 
 pub fn diff_geohash_encode_osaka_p5_test() -> Nil {
-  let assert Ok(p) = latlng.new(lat: 34.6937, lng: 135.5023)
+  let assert Ok(p) = geokit.lat_lng(latitude: 34.6937, longitude: 135.5023)
   let assert Ok(hash) = geohash.encode(point: p, precision: 5)
   hash |> should.equal("xn0m7")
 }
@@ -243,48 +246,48 @@ pub fn diff_geohash_encode_equator_p5_test() -> Nil {
   // Issue #31: canonical Wikipedia / ngeohash / pygeohash / geohash.org
   // value for the origin is "s0000". The previous "7zzzz" was the
   // pre-fix output from a strict `>` midpoint comparison.
-  let assert Ok(p) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(p) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
   let assert Ok(hash) = geohash.encode(point: p, precision: 5)
   hash |> should.equal("s0000")
 }
 
 pub fn diff_geohash_encode_antimeridian_p5_test() -> Nil {
   // Issue #31: ngeohash output for (0, 180) is "xbpbp".
-  let assert Ok(p) = latlng.new(lat: 0.0, lng: 180.0)
+  let assert Ok(p) = geokit.lat_lng(latitude: 0.0, longitude: 180.0)
   let assert Ok(hash) = geohash.encode(point: p, precision: 5)
   hash |> should.equal("xbpbp")
 }
 
 pub fn diff_geohash_encode_north_pole_p5_test() -> Nil {
   // Issue #31: ngeohash output for (90, 0) is "upbpb".
-  let assert Ok(p) = latlng.new(lat: 90.0, lng: 0.0)
+  let assert Ok(p) = geokit.lat_lng(latitude: 90.0, longitude: 0.0)
   let assert Ok(hash) = geohash.encode(point: p, precision: 5)
   hash |> should.equal("upbpb")
 }
 
 pub fn diff_geohash_encode_south_pole_p5_test() -> Nil {
   // Issue #31: ngeohash output for (-90, 0) is "h0000".
-  let assert Ok(p) = latlng.new(lat: -90.0, lng: 0.0)
+  let assert Ok(p) = geokit.lat_lng(latitude: -90.0, longitude: 0.0)
   let assert Ok(hash) = geohash.encode(point: p, precision: 5)
   hash |> should.equal("h0000")
 }
 
 pub fn diff_geohash_encode_p1_tokyo_test() -> Nil {
-  let assert Ok(p) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(hash) = geohash.encode(point: p, precision: 1)
   hash |> should.equal("x")
 }
 
 pub fn diff_geohash_encode_se_corner_world_test() -> Nil {
   // ngeohash.encode(-89.99, 179.99, 5) = "pbpbp"
-  let assert Ok(p) = latlng.new(lat: -89.99, lng: 179.99)
+  let assert Ok(p) = geokit.lat_lng(latitude: -89.99, longitude: 179.99)
   let assert Ok(hash) = geohash.encode(point: p, precision: 5)
   hash |> should.equal("pbpbp")
 }
 
 pub fn diff_geohash_encode_p1_top_right_test() -> Nil {
   // ngeohash.encode(89, 179, 1) = "z" — last cell of the world.
-  let assert Ok(p) = latlng.new(lat: 89.0, lng: 179.0)
+  let assert Ok(p) = geokit.lat_lng(latitude: 89.0, longitude: 179.0)
   let assert Ok(hash) = geohash.encode(point: p, precision: 1)
   hash |> should.equal("z")
 }
@@ -294,22 +297,22 @@ pub fn diff_geohash_encode_p1_top_right_test() -> Nil {
 pub fn diff_geohash_decode_bounds_tokyo_p5_test() -> Nil {
   // ngeohash.decode_bbox("xn76u") = [35.639648, 139.746094, 35.683594, 139.790039]
   let assert Ok(#(sw, ne)) = geohash.decode_bounds(hash: "xn76u")
-  approx(latlng.lat(sw), 35.639_648, 0.000_001)
+  approx(geokit.latitude(sw), 35.639_648, 0.000_001)
   |> should.be_true
-  approx(latlng.lng(sw), 139.746_094, 0.000_001)
+  approx(geokit.longitude(sw), 139.746_094, 0.000_001)
   |> should.be_true
-  approx(latlng.lat(ne), 35.683_594, 0.000_001)
+  approx(geokit.latitude(ne), 35.683_594, 0.000_001)
   |> should.be_true
-  approx(latlng.lng(ne), 139.790_039, 0.000_001)
+  approx(geokit.longitude(ne), 139.790_039, 0.000_001)
   |> should.be_true
 }
 
 pub fn diff_geohash_decode_bounds_tokyo_p9_test() -> Nil {
   // ngeohash.decode_bbox("xn76urx61") = [35.681190, 139.767079, 35.681233, 139.767122]
   let assert Ok(#(sw, ne)) = geohash.decode_bounds(hash: "xn76urx61")
-  approx(latlng.lat(sw), 35.681_19, 0.000_001)
+  approx(geokit.latitude(sw), 35.681_19, 0.000_001)
   |> should.be_true
-  approx(latlng.lat(ne), 35.681_233, 0.000_001)
+  approx(geokit.latitude(ne), 35.681_233, 0.000_001)
   |> should.be_true
 }
 
@@ -387,12 +390,12 @@ pub fn diff_geohash_decode_rejects_o_test() -> Nil {
 
 pub fn diff_geohash_max_precision_round_trip_test() -> Nil {
   // Precision 12 is the geokit-supported maximum.
-  let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(hash) = geohash.encode(point: tokyo, precision: 12)
   let assert Ok(centre) = geohash.decode(hash)
-  approx(latlng.lat(centre), 35.6812, 0.000_001)
+  approx(geokit.latitude(centre), 35.6812, 0.000_001)
   |> should.be_true
-  approx(latlng.lng(centre), 139.7671, 0.000_001)
+  approx(geokit.longitude(centre), 139.7671, 0.000_001)
   |> should.be_true
 }
 
@@ -400,16 +403,16 @@ pub fn diff_geohash_max_precision_round_trip_test() -> Nil {
 
 pub fn diff_polyline_encode_google_reference_test() -> Nil {
   // Google's canonical example, identical in mapbox/polyline.
-  let assert Ok(p1) = latlng.new(lat: 38.5, lng: -120.2)
-  let assert Ok(p2) = latlng.new(lat: 40.7, lng: -120.95)
-  let assert Ok(p3) = latlng.new(lat: 43.252, lng: -126.453)
+  let assert Ok(p1) = geokit.lat_lng(latitude: 38.5, longitude: -120.2)
+  let assert Ok(p2) = geokit.lat_lng(latitude: 40.7, longitude: -120.95)
+  let assert Ok(p3) = geokit.lat_lng(latitude: 43.252, longitude: -126.453)
   polyline.encode(points: [p1, p2, p3])
   |> should.equal("_p~iF~ps|U_ulLnnqC_mqNvxq`@")
 }
 
 pub fn diff_polyline_encode_single_origin_test() -> Nil {
   // polyline.encode([[0, 0]], 5) = "??"
-  let assert Ok(p) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(p) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
   polyline.encode(points: [p])
   |> should.equal("??")
 }
@@ -422,8 +425,8 @@ pub fn diff_polyline_encode_empty_test() -> Nil {
 pub fn diff_polyline_encode_tokyo_osaka_test() -> Nil {
   // mapbox: polyline.encode(
   //   [[35.6812, 139.7671], [34.6937, 135.5023]], 5) = "o~wxEkgatYzz_E~}_Y"
-  let assert Ok(p1) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(p2) = latlng.new(lat: 34.6937, lng: 135.5023)
+  let assert Ok(p1) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  let assert Ok(p2) = geokit.lat_lng(latitude: 34.6937, longitude: 135.5023)
   polyline.encode(points: [p1, p2])
   |> should.equal("o~wxEkgatYzz_E~}_Y")
 }
@@ -431,8 +434,8 @@ pub fn diff_polyline_encode_tokyo_osaka_test() -> Nil {
 pub fn diff_polyline_encode_across_antimeridian_test() -> Nil {
   // mapbox: polyline.encode(
   //   [[0, 179.99], [0, -179.99]], 5) = "?ohqia@?~qctcA"
-  let assert Ok(p1) = latlng.new(lat: 0.0, lng: 179.99)
-  let assert Ok(p2) = latlng.new(lat: 0.0, lng: -179.99)
+  let assert Ok(p1) = geokit.lat_lng(latitude: 0.0, longitude: 179.99)
+  let assert Ok(p2) = geokit.lat_lng(latitude: 0.0, longitude: -179.99)
   polyline.encode(points: [p1, p2])
   |> should.equal("?ohqia@?~qctcA")
 }
@@ -441,15 +444,17 @@ pub fn diff_polyline_encode_precision_6_test() -> Nil {
   // mapbox: polyline.encode(
   //   [[35.681234, 139.767123], [34.693712, 135.502345]], 6)
   //   = "c|x`cAetuqiGbwg{@rshcG"
-  let assert Ok(p1) = latlng.new(lat: 35.681_234, lng: 139.767_123)
-  let assert Ok(p2) = latlng.new(lat: 34.693_712, lng: 135.502_345)
+  let assert Ok(p1) =
+    geokit.lat_lng(latitude: 35.681_234, longitude: 139.767_123)
+  let assert Ok(p2) =
+    geokit.lat_lng(latitude: 34.693_712, longitude: 135.502_345)
   let assert Ok(encoded) = polyline.encode_with(points: [p1, p2], precision: 6)
   encoded |> should.equal("c|x`cAetuqiGbwg{@rshcG")
 }
 
 pub fn diff_polyline_encode_single_non_origin_test() -> Nil {
   // mapbox: polyline.encode([[10, 20]], 5) = "_c`|@_gayB"
-  let assert Ok(p) = latlng.new(lat: 10.0, lng: 20.0)
+  let assert Ok(p) = geokit.lat_lng(latitude: 10.0, longitude: 20.0)
   polyline.encode(points: [p])
   |> should.equal("_c`|@_gayB")
 }
@@ -459,20 +464,20 @@ pub fn diff_polyline_encode_single_non_origin_test() -> Nil {
 pub fn diff_polyline_decode_google_reference_test() -> Nil {
   let assert Ok(points) = polyline.decode(input: "_p~iF~ps|U_ulLnnqC_mqNvxq`@")
   let assert [p1, p2, p3] = points
-  approx(latlng.lat(p1), 38.5, 0.000_01) |> should.be_true
-  approx(latlng.lng(p1), -120.2, 0.000_01) |> should.be_true
-  approx(latlng.lat(p2), 40.7, 0.000_01) |> should.be_true
-  approx(latlng.lng(p2), -120.95, 0.000_01) |> should.be_true
-  approx(latlng.lat(p3), 43.252, 0.000_01) |> should.be_true
-  approx(latlng.lng(p3), -126.453, 0.000_01) |> should.be_true
+  approx(geokit.latitude(p1), 38.5, 0.000_01) |> should.be_true
+  approx(geokit.longitude(p1), -120.2, 0.000_01) |> should.be_true
+  approx(geokit.latitude(p2), 40.7, 0.000_01) |> should.be_true
+  approx(geokit.longitude(p2), -120.95, 0.000_01) |> should.be_true
+  approx(geokit.latitude(p3), 43.252, 0.000_01) |> should.be_true
+  approx(geokit.longitude(p3), -126.453, 0.000_01) |> should.be_true
 }
 
 pub fn diff_polyline_decode_single_non_origin_test() -> Nil {
   // mapbox: polyline.encode([[35.6812, 139.7671]], 5) = "o~wxEkgatY"
   let assert Ok(points) = polyline.decode(input: "o~wxEkgatY")
   let assert [p] = points
-  approx(latlng.lat(p), 35.6812, 0.000_01) |> should.be_true
-  approx(latlng.lng(p), 139.7671, 0.000_01) |> should.be_true
+  approx(geokit.latitude(p), 35.6812, 0.000_01) |> should.be_true
+  approx(geokit.longitude(p), 139.7671, 0.000_01) |> should.be_true
 }
 
 pub fn diff_polyline_decode_rejects_below_63_test() -> Nil {
@@ -495,7 +500,7 @@ pub fn diff_polyline_round_trip_10_points_test() -> Nil {
 // --- Mercator tile vs OSM slippy-map / Bing quadkey --------------------
 
 pub fn diff_mercator_tokyo_z0_test() -> Nil {
-  let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(t) = mercator.from_lat_lng(point: tokyo, zoom: 0)
   mercator.x(tile: t) |> should.equal(0)
   mercator.y(tile: t) |> should.equal(0)
@@ -503,35 +508,35 @@ pub fn diff_mercator_tokyo_z0_test() -> Nil {
 
 pub fn diff_mercator_tokyo_z5_test() -> Nil {
   // OSM formula: x=28, y=12 at zoom 5.
-  let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(t) = mercator.from_lat_lng(point: tokyo, zoom: 5)
   mercator.x(tile: t) |> should.equal(28)
   mercator.y(tile: t) |> should.equal(12)
 }
 
 pub fn diff_mercator_tokyo_z10_test() -> Nil {
-  let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(t) = mercator.from_lat_lng(point: tokyo, zoom: 10)
   mercator.x(tile: t) |> should.equal(909)
   mercator.y(tile: t) |> should.equal(403)
 }
 
 pub fn diff_mercator_tokyo_z14_test() -> Nil {
-  let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(t) = mercator.from_lat_lng(point: tokyo, zoom: 14)
   mercator.x(tile: t) |> should.equal(14_552)
   mercator.y(tile: t) |> should.equal(6451)
 }
 
 pub fn diff_mercator_tokyo_z18_test() -> Nil {
-  let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
+  let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(t) = mercator.from_lat_lng(point: tokyo, zoom: 18)
   mercator.x(tile: t) |> should.equal(232_847)
   mercator.y(tile: t) |> should.equal(103_226)
 }
 
 pub fn diff_mercator_london_z14_test() -> Nil {
-  let assert Ok(london) = latlng.new(lat: 51.5074, lng: -0.1278)
+  let assert Ok(london) = geokit.lat_lng(latitude: 51.5074, longitude: -0.1278)
   let assert Ok(t) = mercator.from_lat_lng(point: london, zoom: 14)
   mercator.x(tile: t) |> should.equal(8186)
   mercator.y(tile: t) |> should.equal(5448)
@@ -539,7 +544,7 @@ pub fn diff_mercator_london_z14_test() -> Nil {
 
 pub fn diff_mercator_nyc_z14_test() -> Nil {
   // OSM formula: (4823, 6160).
-  let assert Ok(nyc) = latlng.new(lat: 40.7128, lng: -74.006)
+  let assert Ok(nyc) = geokit.lat_lng(latitude: 40.7128, longitude: -74.006)
   let assert Ok(t) = mercator.from_lat_lng(point: nyc, zoom: 14)
   mercator.x(tile: t) |> should.equal(4823)
   mercator.y(tile: t) |> should.equal(6160)
@@ -566,9 +571,9 @@ pub fn diff_mercator_quadkey_london_z14_test() -> Nil {
 pub fn diff_mercator_tile_nw_z0_test() -> Nil {
   let assert Ok(t) = mercator.new(zoom: 0, x: 0, y: 0)
   let nw = mercator.to_lat_lng(tile: t)
-  approx(latlng.lat(nw), 85.051_128, 0.000_001)
+  approx(geokit.latitude(nw), 85.051_128, 0.000_001)
   |> should.be_true
-  approx(latlng.lng(nw), -180.0, 0.000_001)
+  approx(geokit.longitude(nw), -180.0, 0.000_001)
   |> should.be_true
 }
 
@@ -576,9 +581,9 @@ pub fn diff_mercator_tile_nw_tokyo_z14_test() -> Nil {
   // OSM: tile_to_latlng_nw(14, 14552, 6451) = (35.692995, 139.746094)
   let assert Ok(t) = mercator.new(zoom: 14, x: 14_552, y: 6451)
   let nw = mercator.to_lat_lng(tile: t)
-  approx(latlng.lat(nw), 35.692_995, 0.000_01)
+  approx(geokit.latitude(nw), 35.692_995, 0.000_01)
   |> should.be_true
-  approx(latlng.lng(nw), 139.746_094, 0.000_01)
+  approx(geokit.longitude(nw), 139.746_094, 0.000_01)
   |> should.be_true
 }
 
@@ -607,7 +612,7 @@ pub fn diff_mercator_quadkey_rejects_digit_above_3_test() -> Nil {
 }
 
 pub fn diff_mercator_zoom_zero_single_tile_test() -> Nil {
-  let assert Ok(p) = latlng.new(lat: 45.0, lng: 90.0)
+  let assert Ok(p) = geokit.lat_lng(latitude: 45.0, longitude: 90.0)
   let assert Ok(t) = mercator.from_lat_lng(point: p, zoom: 0)
   mercator.x(tile: t) |> should.equal(0)
   mercator.y(tile: t) |> should.equal(0)
@@ -616,7 +621,7 @@ pub fn diff_mercator_zoom_zero_single_tile_test() -> Nil {
 
 pub fn diff_mercator_zoom_30_extreme_test() -> Nil {
   // 2^29 = 536_870_912 — lng=0 lands at x = 2^29 at zoom 30.
-  let assert Ok(p) = latlng.new(lat: 0.0, lng: 0.0)
+  let assert Ok(p) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
   let assert Ok(t) = mercator.from_lat_lng(point: p, zoom: 30)
   mercator.zoom(tile: t) |> should.equal(30)
   mercator.x(tile: t) |> should.equal(536_870_912)
@@ -624,14 +629,14 @@ pub fn diff_mercator_zoom_30_extreme_test() -> Nil {
 
 pub fn diff_mercator_north_pole_clamps_test() -> Nil {
   // Latitude 90 clamps to the Mercator pole limit → y = 0.
-  let assert Ok(p) = latlng.new(lat: 90.0, lng: 0.0)
+  let assert Ok(p) = geokit.lat_lng(latitude: 90.0, longitude: 0.0)
   let assert Ok(t) = mercator.from_lat_lng(point: p, zoom: 5)
   mercator.y(tile: t) |> should.equal(0)
 }
 
 pub fn diff_mercator_south_pole_clamps_test() -> Nil {
   // Latitude -90 clamps → y = 2^zoom - 1.
-  let assert Ok(p) = latlng.new(lat: -90.0, lng: 0.0)
+  let assert Ok(p) = geokit.lat_lng(latitude: -90.0, longitude: 0.0)
   let assert Ok(t) = mercator.from_lat_lng(point: p, zoom: 5)
   mercator.y(tile: t) |> should.equal(31)
 }
@@ -652,35 +657,35 @@ pub fn diff_mercator_out_of_range_tile_test() -> Nil {
 // --- LatLng ---------------------------------------------------------------
 
 pub fn diff_latlng_91_rejected_test() -> Nil {
-  case latlng.new(lat: 91.0, lng: 0.0) {
-    Error(latlng.LatOutOfRange(lat: 91.0)) -> Nil
+  case geokit.lat_lng(latitude: 91.0, longitude: 0.0) {
+    Error(geokit.LatitudeOutOfRange(latitude: 91.0)) -> Nil
     _ -> should.be_true(False)
   }
 }
 
 pub fn diff_latlng_neg_181_rejected_test() -> Nil {
-  case latlng.new(lat: 0.0, lng: -181.0) {
-    Error(latlng.LngOutOfRange(lng: -181.0)) -> Nil
+  case geokit.lat_lng(latitude: 0.0, longitude: -181.0) {
+    Error(geokit.LongitudeOutOfRange(longitude: -181.0)) -> Nil
     _ -> should.be_true(False)
   }
 }
 
 pub fn diff_latlng_wrap_at_boundary_no_drift_test() -> Nil {
   // Values already in [-180, 180] must short-circuit (no FP drift).
-  let exact = latlng.wrap(lat: 35.681_234, lng: 139.767_123)
-  latlng.lat(exact) |> should.equal(35.681_234)
-  latlng.lng(exact) |> should.equal(139.767_123)
+  let exact = geokit.wrap_lat_lng(latitude: 35.681_234, longitude: 139.767_123)
+  geokit.latitude(exact) |> should.equal(35.681_234)
+  geokit.longitude(exact) |> should.equal(139.767_123)
 }
 
 pub fn diff_latlng_wrap_540_lng_test() -> Nil {
-  let p = latlng.wrap(lat: 0.0, lng: 540.0)
-  approx(latlng.lng(p), -180.0, 0.000_001)
+  let p = geokit.wrap_lat_lng(latitude: 0.0, longitude: 540.0)
+  approx(geokit.longitude(p), -180.0, 0.000_001)
   |> should.be_true
 }
 
 pub fn diff_latlng_wrap_neg_540_lng_test() -> Nil {
-  let p = latlng.wrap(lat: 0.0, lng: -540.0)
-  approx(latlng.lng(p), -180.0, 0.000_001)
+  let p = geokit.wrap_lat_lng(latitude: 0.0, longitude: -540.0)
+  approx(geokit.longitude(p), -180.0, 0.000_001)
   |> should.be_true
 }
 
@@ -688,91 +693,101 @@ pub fn diff_latlng_wrap_neg_540_lng_test() -> Nil {
 
 pub fn diff_bbox_l_shape_line_test() -> Nil {
   // Turf: bbox of LineString [[0,0],[10,0],[10,10],[0,10]] = [0,0,10,10]
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: 10.0)
-  let assert Ok(c) = latlng.new(lat: 10.0, lng: 10.0)
-  let assert Ok(d) = latlng.new(lat: 10.0, lng: 0.0)
-  let assert Ok(#(sw, ne)) =
-    bbox.compute(geometry: geometry.LineString([a, b, c, d]))
-  latlng.lat(sw) |> should.equal(0.0)
-  latlng.lng(sw) |> should.equal(0.0)
-  latlng.lat(ne) |> should.equal(10.0)
-  latlng.lng(ne) |> should.equal(10.0)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 10.0)
+  let assert Ok(c) = geokit.lat_lng(latitude: 10.0, longitude: 10.0)
+  let assert Ok(d) = geokit.lat_lng(latitude: 10.0, longitude: 0.0)
+  let assert Ok(#(sw, ne)) = bbox(geokit.LineString([a, b, c, d]))
+  geokit.latitude(sw) |> should.equal(0.0)
+  geokit.longitude(sw) |> should.equal(0.0)
+  geokit.latitude(ne) |> should.equal(10.0)
+  geokit.longitude(ne) |> should.equal(10.0)
 }
 
 pub fn diff_bbox_triangle_polygon_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: 10.0)
-  let assert Ok(c) = latlng.new(lat: 10.0, lng: 5.0)
-  let assert Ok(#(sw, ne)) =
-    bbox.compute(geometry: geometry.Polygon([[a, b, c, a]]))
-  latlng.lat(sw) |> should.equal(0.0)
-  latlng.lng(sw) |> should.equal(0.0)
-  latlng.lat(ne) |> should.equal(10.0)
-  latlng.lng(ne) |> should.equal(10.0)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 10.0)
+  let assert Ok(c) = geokit.lat_lng(latitude: 10.0, longitude: 5.0)
+  let assert Ok(#(sw, ne)) = bbox(geokit.Polygon([[a, b, c, a]]))
+  geokit.latitude(sw) |> should.equal(0.0)
+  geokit.longitude(sw) |> should.equal(0.0)
+  geokit.latitude(ne) |> should.equal(10.0)
+  geokit.longitude(ne) |> should.equal(10.0)
 }
 
 pub fn diff_centroid_l_shape_line_matches_turf_test() -> Nil {
   // Turf: centroid of LineString [[0,0],[10,0],[10,10],[0,10]] = (5, 5)
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: 10.0)
-  let assert Ok(c) = latlng.new(lat: 10.0, lng: 10.0)
-  let assert Ok(d) = latlng.new(lat: 10.0, lng: 0.0)
-  let assert Ok(c_pt) =
-    centroid.compute(geometry: geometry.LineString([a, b, c, d]))
-  approx(latlng.lat(c_pt), 5.0, 0.000_001)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 10.0)
+  let assert Ok(c) = geokit.lat_lng(latitude: 10.0, longitude: 10.0)
+  let assert Ok(d) = geokit.lat_lng(latitude: 10.0, longitude: 0.0)
+  let assert Ok(c_pt) = geokit.centroid(geokit.LineString([a, b, c, d]))
+  approx(geokit.latitude(c_pt), 5.0, 0.000_001)
   |> should.be_true
-  approx(latlng.lng(c_pt), 5.0, 0.000_001)
+  approx(geokit.longitude(c_pt), 5.0, 0.000_001)
   |> should.be_true
 }
 
 pub fn diff_centroid_square_polygon_matches_turf_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: 10.0)
-  let assert Ok(c) = latlng.new(lat: 10.0, lng: 10.0)
-  let assert Ok(d) = latlng.new(lat: 10.0, lng: 0.0)
-  let assert Ok(c_pt) =
-    centroid.compute(geometry: geometry.Polygon([[a, b, c, d, a]]))
-  approx(latlng.lat(c_pt), 5.0, 0.000_001)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 10.0)
+  let assert Ok(c) = geokit.lat_lng(latitude: 10.0, longitude: 10.0)
+  let assert Ok(d) = geokit.lat_lng(latitude: 10.0, longitude: 0.0)
+  let assert Ok(c_pt) = geokit.centroid(geokit.Polygon([[a, b, c, d, a]]))
+  approx(geokit.latitude(c_pt), 5.0, 0.000_001)
   |> should.be_true
-  approx(latlng.lng(c_pt), 5.0, 0.000_001)
+  approx(geokit.longitude(c_pt), 5.0, 0.000_001)
   |> should.be_true
 }
 
 pub fn diff_centroid_triangle_polygon_matches_turf_test() -> Nil {
   // Triangle vertices (0,0), (0,10), (10,5). Vertex mean = (3.333, 5),
   // identical to the signed-area centroid for triangles.
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: 10.0)
-  let assert Ok(c) = latlng.new(lat: 10.0, lng: 5.0)
-  let assert Ok(c_pt) =
-    centroid.compute(geometry: geometry.Polygon([[a, b, c, a]]))
-  approx(latlng.lng(c_pt), 5.0, 0.000_001)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 10.0)
+  let assert Ok(c) = geokit.lat_lng(latitude: 10.0, longitude: 5.0)
+  let assert Ok(c_pt) = geokit.centroid(geokit.Polygon([[a, b, c, a]]))
+  approx(geokit.longitude(c_pt), 5.0, 0.000_001)
   |> should.be_true
-  approx(latlng.lat(c_pt), 3.333_333_333, 0.000_01)
+  approx(geokit.latitude(c_pt), 3.333_333_333, 0.000_01)
   |> should.be_true
 }
 
 pub fn diff_simplify_wavy_drops_at_large_tolerance_test() -> Nil {
   // Turf: simplify([[0,0],[1,0.001],[2,-0.001],[3,0.001],[4,0]], tol=0.01)
   //   = [[0,0],[4,0]]
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.001, lng: 1.0)
-  let assert Ok(c) = latlng.new(lat: -0.001, lng: 2.0)
-  let assert Ok(d) = latlng.new(lat: 0.001, lng: 3.0)
-  let assert Ok(e) = latlng.new(lat: 0.0, lng: 4.0)
-  let assert Ok(out) =
-    simplify.line_string(points: [a, b, c, d, e], tolerance: 0.01)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.001, longitude: 1.0)
+  let assert Ok(c) = geokit.lat_lng(latitude: -0.001, longitude: 2.0)
+  let assert Ok(d) = geokit.lat_lng(latitude: 0.001, longitude: 3.0)
+  let assert Ok(e) = geokit.lat_lng(latitude: 0.0, longitude: 4.0)
+  let assert Ok(out) = simplify_line([a, b, c, d, e], tolerance: 0.01)
   list.length(out) |> should.equal(2)
 }
 
 pub fn diff_simplify_wavy_keeps_at_small_tolerance_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.001, lng: 1.0)
-  let assert Ok(c) = latlng.new(lat: -0.001, lng: 2.0)
-  let assert Ok(d) = latlng.new(lat: 0.001, lng: 3.0)
-  let assert Ok(e) = latlng.new(lat: 0.0, lng: 4.0)
-  let assert Ok(out) =
-    simplify.line_string(points: [a, b, c, d, e], tolerance: 0.000_1)
+  let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 0.001, longitude: 1.0)
+  let assert Ok(c) = geokit.lat_lng(latitude: -0.001, longitude: 2.0)
+  let assert Ok(d) = geokit.lat_lng(latitude: 0.001, longitude: 3.0)
+  let assert Ok(e) = geokit.lat_lng(latitude: 0.0, longitude: 4.0)
+  let assert Ok(out) = simplify_line([a, b, c, d, e], tolerance: 0.000_1)
   list.length(out) |> should.equal(5)
+}
+
+// --- API adapters ----------------------------------------------------------
+
+fn bbox(geometry: geokit.Geometry) -> Result(#(LatLng, LatLng), Nil) {
+  geokit.bounding_box(geometry)
+  |> result.map(fn(box) { #(box.south_west, box.north_east) })
+}
+
+fn simplify_line(
+  points: List(LatLng),
+  tolerance tolerance: Float,
+) -> Result(List(LatLng), Nil) {
+  case geokit.simplify(geokit.LineString(points), tolerance:) {
+    Ok(geokit.LineString(simplified)) -> Ok(simplified)
+    _ -> Error(Nil)
+  }
 }
