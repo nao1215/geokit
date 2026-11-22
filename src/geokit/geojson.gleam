@@ -20,6 +20,7 @@
 //// `decode.Decoder` when decoding. Use `gleam/dynamic/decode.dynamic`
 //// and `gleam/json.null()` if you don't care about properties.
 
+import gleam/bool
 import gleam/dynamic/decode.{type Decoder}
 import gleam/int
 import gleam/json.{type Json}
@@ -236,13 +237,8 @@ fn json_error_to_geojson(err: json.DecodeError) -> GeoJsonError {
   }
 }
 
-/// Project a `decode.DecodeError` list into a single, human-actionable
-/// reason string. The previous implementation collapsed every shape
-/// mismatch into the opaque `"JSON shape did not match expected
-/// GeoJSON"` regardless of the underlying cause. Now the reason
-/// names the failing path, the expected type, and the value that
-/// was actually found so a caller routing on the reason string can
-/// triage a 400 response without re-parsing the JSON.
+// The reason names the failing path, the expected type and the value
+// that was found, taken from the first decode error.
 fn decode_errors_to_reason(errors: List(decode.DecodeError)) -> String {
   case errors {
     [] -> "JSON shape did not match expected GeoJSON"
@@ -343,66 +339,33 @@ fn raw_multi_polygon_to_geometry(
 fn parse_rings(
   raw: List(List(List(Float))),
 ) -> Result(List(List(LatLng)), GeoJsonError) {
-  use _ <- result.try(check_polygon_has_ring(raw))
+  use <- bool.guard(
+    when: raw == [],
+    return: Error(InvalidPolygon(
+      reason: "Polygon must contain at least one linear ring (RFC 7946 §3.1.6)",
+    )),
+  )
   use rings <- result.try(
     list.try_map(raw, fn(ring) { list.try_map(ring, parse_position) }),
   )
-  use _ <- result.map(check_all_rings(rings))
+  use _ <- result.map(list.try_each(rings, check_linear_ring))
   rings
 }
 
-fn check_all_rings(rings: List(List(LatLng))) -> Result(Nil, GeoJsonError) {
-  case rings {
-    [] -> Ok(Nil)
-    [head, ..rest] ->
-      case check_linear_ring(head) {
-        Ok(Nil) -> check_all_rings(rest)
-        Error(e) -> Error(e)
-      }
-  }
-}
-
-fn check_polygon_has_ring(
-  raw: List(List(List(Float))),
-) -> Result(Nil, GeoJsonError) {
-  case raw {
-    [] ->
-      Error(InvalidPolygon(
-        reason: "Polygon must contain at least one linear ring (RFC 7946 §3.1.6)",
-      ))
-    _ -> Ok(Nil)
-  }
-}
-
 fn check_linear_ring(ring: List(LatLng)) -> Result(Nil, GeoJsonError) {
-  case ring {
-    [first, _, _, _, ..] ->
-      case last_in_list(ring) {
-        Ok(last) ->
-          case latlng.equal(first, last) {
-            True -> Ok(Nil)
-            False ->
-              Error(InvalidPolygon(
-                reason: "linear ring must be closed: first position must equal last (RFC 7946 §3.1.6)",
-              ))
-          }
-        Error(Nil) ->
+  case ring, list.last(ring) {
+    [first, _, _, _, ..], Ok(last) ->
+      case latlng.equal(first, last) {
+        True -> Ok(Nil)
+        False ->
           Error(InvalidPolygon(
-            reason: "linear ring must have at least four positions (RFC 7946 §3.1.6)",
+            reason: "linear ring must be closed: first position must equal last (RFC 7946 §3.1.6)",
           ))
       }
-    _ ->
+    _, _ ->
       Error(InvalidPolygon(
         reason: "linear ring must have at least four positions (RFC 7946 §3.1.6)",
       ))
-  }
-}
-
-fn last_in_list(items: List(a)) -> Result(a, Nil) {
-  case items {
-    [] -> Error(Nil)
-    [only] -> Ok(only)
-    [_, ..rest] -> last_in_list(rest)
   }
 }
 
@@ -415,10 +378,8 @@ fn parse_position(coords: List(Float)) -> Result(LatLng, GeoJsonError) {
 }
 
 fn wrap_position(lng: Float, lat: Float) -> Result(LatLng, GeoJsonError) {
-  case latlng.new(lat: lat, lng: lng) {
-    Ok(p) -> Ok(p)
-    Error(e) -> Error(InvalidLatLng(e))
-  }
+  latlng.new(lat: lat, lng: lng)
+  |> result.map_error(InvalidLatLng)
 }
 
 // --- JSON → Feature ------------------------------------------------------
@@ -438,10 +399,7 @@ fn feature_decoder(
         }),
       )
     }
-    other -> {
-      use _ <- decode.then(decode.success(Nil))
-      decode.success(Error(UnknownType(other)))
-    }
+    other -> decode.success(Error(UnknownType(other)))
   }
 }
 
@@ -463,9 +421,6 @@ fn feature_collection_decoder(
       )
       decode.success(result.all(features))
     }
-    other -> {
-      use _ <- decode.then(decode.success(Nil))
-      decode.success(Error(UnknownType(other)))
-    }
+    other -> decode.success(Error(UnknownType(other)))
   }
 }
