@@ -26,7 +26,9 @@ pub type PolylineError {
   /// chunk).
   TruncatedInput
   /// A character outside the printable ASCII range used by the
-  /// encoding appeared in the input.
+  /// encoding appeared in the input, or a value ran past ten chunks.
+  /// `position` is the grapheme index in the input and `char` is that
+  /// grapheme.
   InvalidCharacter(char: String, position: Int)
   /// `precision` was outside the supported range `[1, 11]`. The
   /// Google reference encoding uses 5; Valhalla and OSRM use 6.
@@ -212,10 +214,9 @@ pub fn decode_with(
   )
 }
 
-// The input is walked byte by byte. Every valid character is ASCII, so
-// up to the first invalid byte the byte offset equals the grapheme
-// position reported in `InvalidCharacter`; `input` is kept to slice
-// out the offending grapheme.
+// The input is walked byte by byte, so `position` is a byte offset.
+// `input` is kept so the error path can report the grapheme that holds
+// the offending byte and its grapheme index.
 fn decode_loop(
   input input: String,
   bytes bytes: BitArray,
@@ -282,11 +283,12 @@ fn decode_signed(
   Ok(#(signed, rest, after_pos))
 }
 
-// Each chunk carries 5 bits. A 32-bit value needs at most seven chunks
-// (shifts 0 to 30); a longer run of continuation chunks is rejected at
-// the chunk that would start beyond bit 32, so both targets agree even
-// on inputs that would exceed the JavaScript safe-integer range.
-const max_shift: Int = 30
+// Each chunk carries 5 bits. The largest value `encode_with` produces
+// is the ZigZag of 180e11 at precision 11, about 46 bits, which needs
+// ten chunks (shifts 0 to 45). A longer run of continuation chunks is
+// rejected at the chunk that would start beyond bit 50, so every
+// accepted value stays below 2^53 and both targets agree.
+const max_shift: Int = 45
 
 fn decode_unsigned(
   input input: String,
@@ -312,15 +314,53 @@ fn decode_unsigned(
       }
     }
     <<_, _:bytes>> ->
-      Error(InvalidCharacter(
-        char: string.slice(input, position, 1),
-        position: position,
-      ))
+      Error(invalid_character(input: input, byte_offset: position))
     _ -> Error(TruncatedInput)
   }
 }
 
 // --- Helpers -------------------------------------------------------------
+
+// The grapheme of `input` that contains the byte at `byte_offset`, and
+// its grapheme index. Only called on the error path, so the walk over
+// the graphemes costs nothing on valid input. A combining mark after
+// an ASCII character joins it into one grapheme, so the reported
+// character is the whole cluster at the cluster's index.
+fn invalid_character(
+  input input: String,
+  byte_offset byte_offset: Int,
+) -> PolylineError {
+  locate_grapheme(
+    graphemes: string.to_graphemes(input),
+    byte_offset: byte_offset,
+    start: 0,
+    index: 0,
+  )
+}
+
+fn locate_grapheme(
+  graphemes graphemes: List(String),
+  byte_offset byte_offset: Int,
+  start start: Int,
+  index index: Int,
+) -> PolylineError {
+  case graphemes {
+    [] -> InvalidCharacter(char: "", position: index)
+    [grapheme, ..rest] -> {
+      let end = start + string.byte_size(grapheme)
+      case byte_offset < end {
+        True -> InvalidCharacter(char: grapheme, position: index)
+        False ->
+          locate_grapheme(
+            graphemes: rest,
+            byte_offset: byte_offset,
+            start: end,
+            index: index + 1,
+          )
+      }
+    }
+  }
+}
 
 fn scale_factor(precision: Int) -> Float {
   list.repeat(10, times: precision)
