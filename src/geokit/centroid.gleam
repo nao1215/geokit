@@ -15,6 +15,7 @@
 import gleam/bool
 import gleam/int
 import gleam/list
+import gleam/result
 
 import geokit/geometry.{
   type Geometry, LineString, MultiPoint, MultiPolygon, Point, Polygon,
@@ -104,46 +105,107 @@ fn mean_of_points(
   Ok(latlng.wrap(lat: sum_lat /. count_f, lng: sum_lng /. count_f))
 }
 
+// First moments and twice the area of a polygon, accumulated over its
+// rings with the shoelace formula. The centroid is
+// `#(sum_x, sum_y) / (3 * area_twice)`; sums of several polygons give
+// the area-weighted centroid of the whole.
+type Moments {
+  Moments(sum_x: Float, sum_y: Float, area_twice: Float)
+}
+
 fn polygon_centroid(
   rings rings: List(List(LatLng)),
 ) -> Result(LatLng, CentroidError) {
-  case rings {
-    [] -> Error(EmptyGeometry)
-    [exterior, ..] -> ring_centroid(ring: exterior)
-  }
+  use exterior <- result.try(exterior_ring(rings: rings))
+  from_moments(moments: polygon_moments(rings: rings), fallback: fn() {
+    mean_of_points(points: exterior)
+  })
 }
 
-fn ring_centroid(ring ring: List(LatLng)) -> Result(LatLng, CentroidError) {
-  case ring {
-    [] -> Error(EmptyGeometry)
-    [single] -> Ok(single)
-    _ -> ring_centroid_weighted(ring: ring)
-  }
-}
-
-fn ring_centroid_weighted(
-  ring ring: List(LatLng),
+fn multipolygon_centroid(
+  polygons polygons: List(List(List(LatLng))),
 ) -> Result(LatLng, CentroidError) {
-  let closed = ensure_closed(points: ring)
-  let #(sum_x, sum_y, signed_area_twice) =
-    ring_sums(points: closed, sum_x: 0.0, sum_y: 0.0, area_twice: 0.0)
-  use <- bool.guard(
-    when: signed_area_twice == 0.0,
-    return: mean_of_points(points: ring),
-  )
-  let factor = 1.0 /. { 3.0 *. signed_area_twice }
-  Ok(latlng.wrap(lat: sum_y *. factor, lng: sum_x *. factor))
+  let polygons =
+    list.filter(polygons, fn(rings) { result.is_ok(exterior_ring(rings:)) })
+  use <- bool.guard(when: polygons == [], return: Error(EmptyGeometry))
+  let total =
+    list.fold(polygons, Moments(0.0, 0.0, 0.0), fn(total, rings) {
+      add_moments(total, polygon_moments(rings: rings))
+    })
+  from_moments(moments: total, fallback: fn() {
+    // Every polygon has zero area: average what each one falls back to.
+    list.filter_map(polygons, polygon_centroid)
+    |> mean_of_points
+  })
 }
 
-fn ring_sums(
-  points points: List(LatLng),
-  sum_x sum_x: Float,
-  sum_y sum_y: Float,
-  area_twice area_twice: Float,
-) -> #(Float, Float, Float) {
+// The exterior ring, or `EmptyGeometry` when there is no ring or the
+// exterior has no points.
+fn exterior_ring(
+  rings rings: List(List(LatLng)),
+) -> Result(List(LatLng), CentroidError) {
+  case rings {
+    [[_, ..] as exterior, ..] -> Ok(exterior)
+    _ -> Error(EmptyGeometry)
+  }
+}
+
+// Whatever the winding order, the exterior counts with positive area
+// and every hole with negative area, as in GEOS / Shapely.
+fn polygon_moments(rings rings: List(List(LatLng))) -> Moments {
+  case rings {
+    [] -> Moments(0.0, 0.0, 0.0)
+    [exterior, ..holes] ->
+      list.fold(
+        holes,
+        oriented(ring_moments(exterior), positive: True),
+        fn(total, hole) {
+          add_moments(total, oriented(ring_moments(hole), positive: False))
+        },
+      )
+  }
+}
+
+fn oriented(moments: Moments, positive positive: Bool) -> Moments {
+  use <- bool.guard(
+    when: { moments.area_twice <. 0.0 } != positive,
+    return: moments,
+  )
+  Moments(
+    sum_x: 0.0 -. moments.sum_x,
+    sum_y: 0.0 -. moments.sum_y,
+    area_twice: 0.0 -. moments.area_twice,
+  )
+}
+
+fn add_moments(a: Moments, b: Moments) -> Moments {
+  Moments(
+    sum_x: a.sum_x +. b.sum_x,
+    sum_y: a.sum_y +. b.sum_y,
+    area_twice: a.area_twice +. b.area_twice,
+  )
+}
+
+fn from_moments(
+  moments moments: Moments,
+  fallback fallback: fn() -> Result(LatLng, CentroidError),
+) -> Result(LatLng, CentroidError) {
+  let area_twice = moments.area_twice
+  // Numeric test so a -0.0 total also counts as zero on Erlang.
+  use <- bool.lazy_guard(
+    when: area_twice >=. 0.0 && area_twice <=. 0.0,
+    return: fallback,
+  )
+  let factor = 1.0 /. { 3.0 *. area_twice }
+  Ok(latlng.wrap(lat: moments.sum_y *. factor, lng: moments.sum_x *. factor))
+}
+
+fn ring_moments(ring: List(LatLng)) -> Moments {
+  ring_sums(points: ensure_closed(points: ring), acc: Moments(0.0, 0.0, 0.0))
+}
+
+fn ring_sums(points points: List(LatLng), acc acc: Moments) -> Moments {
   case points {
-    [] -> #(sum_x, sum_y, area_twice)
-    [_] -> #(sum_x, sum_y, area_twice)
     [a, b, ..rest] -> {
       let x0 = latlng.lng(a)
       let y0 = latlng.lat(a)
@@ -152,11 +214,14 @@ fn ring_sums(
       let cross = x0 *. y1 -. x1 *. y0
       ring_sums(
         points: [b, ..rest],
-        sum_x: sum_x +. { x0 +. x1 } *. cross,
-        sum_y: sum_y +. { y0 +. y1 } *. cross,
-        area_twice: area_twice +. cross,
+        acc: Moments(
+          sum_x: acc.sum_x +. { x0 +. x1 } *. cross,
+          sum_y: acc.sum_y +. { y0 +. y1 } *. cross,
+          area_twice: acc.area_twice +. cross,
+        ),
       )
     }
+    _ -> acc
   }
 }
 
@@ -168,16 +233,5 @@ fn ensure_closed(points points: List(LatLng)) -> List(LatLng) {
         False -> list.append(points, [first])
       }
     _, _ -> points
-  }
-}
-
-fn multipolygon_centroid(
-  polygons polygons: List(List(List(LatLng))),
-) -> Result(LatLng, CentroidError) {
-  let centroids =
-    list.filter_map(polygons, fn(polygon) { polygon_centroid(rings: polygon) })
-  case centroids {
-    [] -> Error(EmptyGeometry)
-    _ -> mean_of_points(points: centroids)
   }
 }

@@ -247,3 +247,76 @@ pub fn polygon_centroid_with_signed_zero_closure_test() -> Nil {
   approx_equal(latlng.lng(c), 1.0, 1.0e-12)
   |> should.be_true
 }
+
+// --- holes and multipolygons (area-weighted) -----------------------------
+
+fn ring(coords: List(#(Float, Float))) -> List(latlng.LatLng) {
+  list.map(coords, fn(c) { latlng.new_or_panic(lat: c.1, lng: c.0) })
+}
+
+// Coordinates are (lng, lat), as in Shapely.
+fn outer_square() -> List(latlng.LatLng) {
+  ring([#(0.0, 0.0), #(10.0, 0.0), #(10.0, 10.0), #(0.0, 10.0), #(0.0, 0.0)])
+}
+
+fn west_hole() -> List(latlng.LatLng) {
+  ring([#(1.0, 1.0), #(1.0, 9.0), #(4.0, 9.0), #(4.0, 1.0), #(1.0, 1.0)])
+}
+
+fn small_square() -> List(latlng.LatLng) {
+  ring([#(20.0, 0.0), #(22.0, 0.0), #(22.0, 2.0), #(20.0, 2.0), #(20.0, 0.0)])
+}
+
+fn close_to(c: latlng.LatLng, lng: Float, lat: Float) -> Nil {
+  approx_equal(latlng.lng(c), lng, 1.0e-12)
+  |> should.be_true
+  approx_equal(latlng.lat(c), lat, 1.0e-12)
+  |> should.be_true
+}
+
+pub fn centroid_of_polygon_with_hole_test() -> Nil {
+  // Shapely: Polygon(square, [hole]).centroid == (440 / 76, 5.0). The
+  // hole (area 24, centre (2.5, 5)) is subtracted from the square
+  // (area 100, centre (5, 5)), whatever the ring orientation.
+  let assert Ok(c) =
+    centroid.compute(geometry: geometry.Polygon([outer_square(), west_hole()]))
+  close_to(c, 440.0 /. 76.0, 5.0)
+  let assert Ok(c) =
+    centroid.compute(
+      geometry: geometry.Polygon([outer_square(), list.reverse(west_hole())]),
+    )
+  close_to(c, 440.0 /. 76.0, 5.0)
+}
+
+pub fn centroid_of_multipolygon_is_area_weighted_test() -> Nil {
+  // Shapely: MultiPolygon([square, small]).centroid == (584 / 104,
+  // 504 / 104). A plain mean of the two centres would give (13, 3).
+  let assert Ok(c) =
+    centroid.compute(
+      geometry: geometry.MultiPolygon([[outer_square()], [small_square()]]),
+    )
+  close_to(c, 584.0 /. 104.0, 504.0 /. 104.0)
+}
+
+pub fn centroid_of_multipolygon_with_hole_test() -> Nil {
+  // Square minus hole (area 76) plus the small square (area 4, wound
+  // clockwise): (524 / 80, 384 / 80).
+  let assert Ok(c) =
+    centroid.compute(
+      geometry: geometry.MultiPolygon([
+        [outer_square(), west_hole()],
+        [list.reverse(small_square())],
+      ]),
+    )
+  close_to(c, 524.0 /. 80.0, 384.0 /. 80.0)
+}
+
+pub fn centroid_of_zero_area_multipolygon_falls_back_to_vertex_mean_test() -> Nil {
+  // Two degenerate polygons: each falls back to the mean of its
+  // exterior vertices, and the result is the mean of those.
+  let line_a = ring([#(0.0, 0.0), #(2.0, 0.0), #(0.0, 0.0)])
+  let line_b = ring([#(10.0, 10.0), #(10.0, 12.0), #(10.0, 10.0)])
+  let assert Ok(c) =
+    centroid.compute(geometry: geometry.MultiPolygon([[line_a], [line_b]]))
+  close_to(c, { 2.0 /. 3.0 +. 10.0 } /. 2.0, { 0.0 +. 32.0 /. 3.0 } /. 2.0)
+}
