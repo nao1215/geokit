@@ -344,11 +344,7 @@ fn perpendicular_distance(p p: LatLng, a a: LatLng, b b: LatLng) -> Float {
     }
     False -> {
       let cross = { x -. x1 } *. dy -. { y -. y1 } *. dx
-      let abs_cross = case cross <. 0.0 {
-        True -> 0.0 -. cross
-        False -> cross
-      }
-      abs_cross /. sqrt_nonneg(length_squared)
+      float.absolute_value(cross) /. sqrt_nonneg(length_squared)
     }
   }
 }
