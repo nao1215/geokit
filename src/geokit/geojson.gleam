@@ -21,6 +21,7 @@
 //// and `gleam/json.null()` if you don't care about properties.
 
 import gleam/dynamic/decode.{type Decoder}
+import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -261,34 +262,34 @@ fn geometry_decoder() -> Decoder(Result(Geometry, GeoJsonError)) {
   use type_ <- decode.field("type", decode.string)
   case type_ {
     "Point" -> {
-      use coords <- decode.field("coordinates", decode.list(decode.float))
+      use coords <- decode.field("coordinates", decode.list(number_decoder()))
       decode.success(raw_point_to_geometry(coords))
     }
     "MultiPoint" -> {
       use coords <- decode.field(
         "coordinates",
-        decode.list(decode.list(decode.float)),
+        decode.list(decode.list(number_decoder())),
       )
       decode.success(raw_multi_point_to_geometry(coords))
     }
     "LineString" -> {
       use coords <- decode.field(
         "coordinates",
-        decode.list(decode.list(decode.float)),
+        decode.list(decode.list(number_decoder())),
       )
       decode.success(raw_line_string_to_geometry(coords))
     }
     "Polygon" -> {
       use coords <- decode.field(
         "coordinates",
-        decode.list(decode.list(decode.list(decode.float))),
+        decode.list(decode.list(decode.list(number_decoder()))),
       )
       decode.success(raw_polygon_to_geometry(coords))
     }
     "MultiPolygon" -> {
       use coords <- decode.field(
         "coordinates",
-        decode.list(decode.list(decode.list(decode.list(decode.float)))),
+        decode.list(decode.list(decode.list(decode.list(number_decoder())))),
       )
       decode.success(raw_multi_polygon_to_geometry(coords))
     }
@@ -296,6 +297,12 @@ fn geometry_decoder() -> Decoder(Result(Geometry, GeoJsonError)) {
       decode.success(Error(UnsupportedType(type_)))
     other -> decode.success(Error(UnknownType(other)))
   }
+}
+
+// JSON has a single number type; `1` and `1.0` are the same coordinate.
+// The Erlang JSON parser yields an Int for `1`, so accept both.
+fn number_decoder() -> Decoder(Float) {
+  decode.one_of(decode.float, [decode.int |> decode.map(int.to_float)])
 }
 
 fn raw_point_to_geometry(
