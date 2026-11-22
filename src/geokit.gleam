@@ -330,8 +330,9 @@ fn all_points(geometry: Geometry) -> List(LatLng) {
 /// give the mean of their vertices. A `Polygon` gives the area centroid
 /// with holes subtracted, and a `MultiPolygon` weights its polygons by
 /// area. A polygon with zero area falls back to the mean of its exterior
-/// vertices. Returns `Error(Nil)` when there is nothing to average, such
-/// as an empty list or a polygon without an exterior ring.
+/// vertices, and a `MultiPolygon` with zero total area to the mean of its
+/// polygons' centroids. Returns `Error(Nil)` when there is nothing to
+/// average, such as an empty list or a polygon without an exterior ring.
 ///
 /// ## Examples
 ///
