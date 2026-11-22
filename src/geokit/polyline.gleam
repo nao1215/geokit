@@ -160,7 +160,9 @@ fn bit_not_lower(value: Int) -> Int {
 
 /// Returns the positions in an encoded polyline. `precision` must be the
 /// one used to encode it, in [1, 11]. Returns an error for a malformed
-/// string or a position outside the latitude or longitude range.
+/// string or a position outside the latitude or longitude range. One
+/// position out of range fails the whole decode with
+/// `CoordinateOutOfRange(index:)`, the index of that position.
 ///
 /// ## Examples
 ///
