@@ -51,7 +51,7 @@ pub fn new(zoom zoom: Int, x x: Int, y y: Int) -> Result(Tile, MercatorError) {
     when: zoom < 0 || zoom > 30,
     return: Error(ZoomOutOfRange(zoom: zoom)),
   )
-  let max_coord = pow_2(zoom)
+  let max_coord = int.bitwise_shift_left(1, zoom)
   use <- bool.guard(
     when: x < 0 || y < 0 || x >= max_coord || y >= max_coord,
     return: Error(TileCoordOutOfRange(zoom: zoom, x: x, y: y)),
@@ -94,16 +94,14 @@ pub fn from_lat_lng(
   let lat =
     float.clamp(latlng.lat(point), min: 0.0 -. pole_limit, max: pole_limit)
   let lng = latlng.lng(point)
-  let n = int_to_float(pow_2(zoom))
+  let n = int.to_float(int.bitwise_shift_left(1, zoom))
   let lat_rad = maths.degrees_to_radians(lat)
   let x_float = { lng +. 180.0 } /. 360.0 *. n
   let y_float =
     { 1.0 -. maths.asinh(maths.tan(lat_rad)) /. maths.pi() } /. 2.0 *. n
-  let max_coord = pow_2(zoom)
-  let x_int =
-    clamp_int(value: float_to_int(x_float), min: 0, max: max_coord - 1)
-  let y_int =
-    clamp_int(value: float_to_int(y_float), min: 0, max: max_coord - 1)
+  let max_coord = int.bitwise_shift_left(1, zoom)
+  let x_int = int.clamp(float.truncate(x_float), min: 0, max: max_coord - 1)
+  let y_int = int.clamp(float.truncate(y_float), min: 0, max: max_coord - 1)
   Ok(Tile(zoom: zoom, x: x_int, y: y_int))
 }
 
@@ -124,10 +122,10 @@ pub fn bounds(tile tile: Tile) -> #(LatLng, LatLng) {
 }
 
 fn corner_lat_lng(zoom zoom: Int, x x: Int, y y: Int) -> LatLng {
-  let n = int_to_float(pow_2(zoom))
-  let lng = int_to_float(x) /. n *. 360.0 -. 180.0
+  let n = int.to_float(int.bitwise_shift_left(1, zoom))
+  let lng = int.to_float(x) /. n *. 360.0 -. 180.0
   let lat_rad =
-    maths.atan(maths.sinh(maths.pi() *. { 1.0 -. 2.0 *. int_to_float(y) /. n }))
+    maths.atan(maths.sinh(maths.pi() *. { 1.0 -. 2.0 *. int.to_float(y) /. n }))
   let lat = maths.radians_to_degrees(lat_rad)
   latlng.wrap(lat: lat, lng: lng)
 }
@@ -146,7 +144,7 @@ fn to_quadkey_loop(
   acc acc: String,
 ) -> String {
   use <- bool.guard(when: level <= 0, return: acc)
-  let mask = pow_2(level - 1)
+  let mask = int.bitwise_shift_left(1, level - 1)
   let bit_x = tile.x / mask % 2
   let bit_y = tile.y / mask % 2
   let digit = bit_x + 2 * bit_y
@@ -207,25 +205,4 @@ fn from_quadkey_loop(
       )
     }
   }
-}
-
-// --- Helpers ------------------------------------------------------------
-
-fn pow_2(exponent: Int) -> Int {
-  use <- bool.guard(when: exponent <= 0, return: 1)
-  2 * pow_2(exponent - 1)
-}
-
-fn float_to_int(value: Float) -> Int {
-  float.truncate(value)
-}
-
-fn int_to_float(value: Int) -> Float {
-  int.to_float(value)
-}
-
-fn clamp_int(value value: Int, min min: Int, max max: Int) -> Int {
-  use <- bool.guard(when: value < min, return: min)
-  use <- bool.guard(when: value > max, return: max)
-  value
 }
