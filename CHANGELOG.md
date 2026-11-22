@@ -7,6 +7,8 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-22
+
 ### Breaking
 
 The public API shrinks from 13 modules to 5: `geokit`, `geokit/geohash`, `geokit/polyline`, `geokit/tile` and `geokit/geojson`.
