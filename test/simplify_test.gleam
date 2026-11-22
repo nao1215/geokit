@@ -1,5 +1,6 @@
 import gleam/int
 import gleam/list
+import gleam_community/maths
 import gleeunit/should
 
 import geokit/geojson
@@ -307,10 +308,19 @@ pub fn compute_polygon_keeps_ring_valid_test() -> Nil {
   |> should.equal(Ok(simplified))
 }
 
-pub fn compute_polygon_keeps_original_when_ring_would_collapse_test() -> Nil {
+pub fn compute_polygon_keeps_four_position_ring_when_it_would_collapse_test() -> Nil {
+  // A triangle (four positions) is already the smallest valid ring, so
+  // it is kept as is at any tolerance.
+  let ring = [ll(0.0, 0.0), ll(0.0, 10.0), ll(10.0, 10.0), ll(0.0, 0.0)]
+  simplify.compute(geometry: geometry.Polygon([ring]), tolerance: 100.0)
+  |> should.equal(Ok(geometry.Polygon([ring])))
+}
+
+pub fn compute_polygon_falls_back_to_smallest_ring_test() -> Nil {
   // At a tolerance larger than the square, both halves reduce to their
-  // endpoints and only three positions would remain, which is not a
-  // valid ring, so the original ring is kept.
+  // endpoints and only three positions would remain. The result is the
+  // smallest valid ring: the start, the pivot and the vertex farthest
+  // from the chord between them, in ring order.
   let ring = [
     ll(0.0, 0.0),
     ll(0.0, 10.0),
@@ -324,10 +334,69 @@ pub fn compute_polygon_keeps_original_when_ring_would_collapse_test() -> Nil {
       tolerance: 100.0,
     )
   simplified
-  |> should.equal(geometry.MultiPolygon([[ring]]))
+  |> should.equal(
+    geometry.MultiPolygon([
+      [[ll(0.0, 0.0), ll(0.0, 10.0), ll(10.0, 10.0), ll(0.0, 0.0)]],
+    ]),
+  )
   geojson.encode_geometry(geometry: simplified)
   |> geojson.decode_geometry
   |> should.equal(Ok(simplified))
+}
+
+pub fn compute_polygon_fallback_keeps_ring_order_test() -> Nil {
+  // The farthest remaining vertex lies after the pivot here, so it
+  // follows the pivot in the fallback ring.
+  let ring = [
+    ll(0.0, 0.0),
+    ll(1.0, 1.0),
+    ll(10.0, 10.0),
+    ll(0.0, 10.0),
+    ll(0.0, 0.0),
+  ]
+  simplify.compute(geometry: geometry.Polygon([ring]), tolerance: 100.0)
+  |> should.equal(
+    Ok(
+      geometry.Polygon([
+        [ll(0.0, 0.0), ll(10.0, 10.0), ll(0.0, 10.0), ll(0.0, 0.0)],
+      ]),
+    ),
+  )
+}
+
+// A closed 1000-vertex ring around (0, 0) whose radius wobbles, so
+// Douglas-Peucker keeps a different number of vertices per tolerance.
+fn wobbly_ring() -> List(latlng.LatLng) {
+  let vertices =
+    list.repeat(Nil, times: 999)
+    |> list.index_map(fn(_, i) {
+      let angle = int.to_float(i) *. 2.0 *. maths.pi() /. 999.0
+      let radius = 1.0 +. 0.1 *. int.to_float(i % 7) /. 7.0
+      ll(radius *. maths.sin(angle), radius *. maths.cos(angle))
+    })
+  let assert [first, ..] = vertices
+  list.append(vertices, [first])
+}
+
+pub fn compute_polygon_size_is_monotonic_in_tolerance_test() -> Nil {
+  let ring = wobbly_ring()
+  list.length(ring)
+  |> should.equal(1000)
+  let sizes =
+    [0.0, 1.0e-4, 1.0e-3, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 10.0, 1000.0]
+    |> list.map(fn(tolerance) {
+      let assert Ok(geometry.Polygon([simplified])) =
+        simplify.compute(geometry: geometry.Polygon([ring]), tolerance:)
+      list.length(simplified)
+    })
+  list.window_by_2(sizes)
+  |> list.each(fn(pair) {
+    { pair.1 <= pair.0 }
+    |> should.be_true
+  })
+  let assert Ok(last) = list.last(sizes)
+  last
+  |> should.equal(4)
 }
 
 // --- tiny segments --------------------------------------------------------
