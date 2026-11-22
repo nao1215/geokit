@@ -7,6 +7,43 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+### Breaking
+
+The public API shrinks from 13 modules to 5: `geokit`, `geokit/geohash`, `geokit/polyline`, `geokit/tile` and `geokit/geojson`.
+
+- `latlng`, `geometry`, `distance`, `bearing`, `bbox`, `centroid`, `simplify` and `point_in_polygon` move into `geokit`. Their functions are `lat_lng`, `wrap_lat_lng`, `latitude`, `longitude`, `distance` (meters), `initial_bearing`, `final_bearing`, `bounding_box`, `centroid`, `simplify` and `locate`.
+- `mercator` is renamed `tile`. `to_lat_lng` is removed; use `bounds`.
+- `bounding_box`, `geohash.decode_bounds` and `tile.bounds` return a `BoundingBox(south_west:, north_east:)` record instead of a tuple.
+- Errors that had one variant are now `Nil`: `BBoxError`, `CentroidError`, `SimplifyError` and `PointInPolygonError`. `MercatorError` becomes `TileError`, and `TileCoordOutOfRange` becomes `CoordinateOutOfRange`.
+- `geojson` returns `gleam/json` values and decoders: `geometry_to_json`, `feature_to_json`, `feature_collection_to_json`, `geometry_decoder`, `feature_decoder` and `feature_collection_decoder`. `GeoJsonError` and the `encode_*` and `decode_*` functions are removed. `Feature.geometry` is now `Option(Geometry)`, and `FeatureId` gains `FloatId`.
+- `polyline.encode` and `decode` take `precision:`, and `encode_with` and `decode_with` are removed. `decode` returns `CoordinateOutOfRange(index:)` for out-of-range coordinates instead of clamping them.
+- `geohash.neighbor` and `neighbors` return `NoNeighborBeyondPole` past a pole instead of `EmptyHash`. The direction label is `toward:`.
+- Removed: `geokit.version`, `latlng.new_or_panic`, `latlng.equal` (use `==`), `bbox.of_points`, `centroid.of_points` (use `MultiPoint`), `distance.haversine_km`, `simplify.line_string` (use `LineString`) and `point_in_polygon.contains` (use `locate`).
+- Labels on a function's first argument are removed, so `geohash.decode(hash: h)` becomes `geohash.decode(h)`.
+- `Geometry` gains `MultiLineString`.
+- The minimum `gleam_stdlib` is 0.51.0, the version `gleam_json` 3 needs.
+
+Before:
+
+```gleam
+import geokit/distance
+import geokit/latlng
+
+let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
+let assert Ok(osaka) = latlng.new(lat: 34.6937, lng: 135.5023)
+distance.haversine(a: tokyo, b: osaka)
+```
+
+After:
+
+```gleam
+import geokit
+
+let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+let assert Ok(osaka) = geokit.lat_lng(latitude: 34.6937, longitude: 135.5023)
+geokit.distance(from: tokyo, to: osaka)
+```
+
 ### Fixed
 
 - `geohash.neighbor` steps east or west across the antimeridian. `neighbor("0", West)` returned `Error(EmptyHash)` and now returns `Ok("p")`.
