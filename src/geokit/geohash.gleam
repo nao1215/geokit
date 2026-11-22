@@ -2,7 +2,7 @@
 //// with a string over the alphabet `0123456789bcdefghjkmnpqrstuvwxyz`.
 //// Each character adds 5 bits, alternating between longitude and
 //// latitude, so a longer hash names a smaller cell inside the shorter
-//// one. Decoding is case-insensitive.
+//// one. Decoding ignores the case of ASCII letters.
 
 import gleam/bool
 import gleam/list
@@ -151,8 +151,8 @@ fn bits_to_base32(bits: List(Int), acc: String) -> String {
 /// ```
 ///
 /// ```gleam
-/// decode("xn7a")
-/// // -> Error(InvalidCharacter(character: "a", position: 3))
+/// decode("XN7A")
+/// // -> Error(InvalidCharacter(character: "A", position: 3))
 /// ```
 pub fn decode(hash: String) -> Result(LatLng, GeohashError) {
   use BoundingBox(south_west: sw, north_east: ne) <- result.try(decode_bounds(
@@ -180,9 +180,8 @@ pub fn decode(hash: String) -> Result(LatLng, GeohashError) {
 /// // -> Error(EmptyHash)
 /// ```
 pub fn decode_bounds(hash: String) -> Result(BoundingBox, GeohashError) {
-  let lowered = string.lowercase(hash)
-  use <- bool.guard(when: lowered == "", return: Error(EmptyHash))
-  use bits <- result.try(hash_to_bits(hash: lowered, position: 0, acc: []))
+  use <- bool.guard(when: hash == "", return: Error(EmptyHash))
+  use bits <- result.try(hash_to_bits(hash: hash, position: 0, acc: []))
   let #(last_axis, other_axis) =
     decode_bits(bits: list.reverse(bits), current: #(-180.0, 180.0), other: #(
       -90.0,
@@ -191,7 +190,7 @@ pub fn decode_bounds(hash: String) -> Result(BoundingBox, GeohashError) {
   // Each character is 5 bits, so an even-length hash has an even number
   // of bits and the axes end where they started (longitude current).
   let #(#(lng_min, lng_max), #(lat_min, lat_max)) = case
-    string.length(lowered) % 2
+    string.length(hash) % 2
   {
     0 -> #(last_axis, other_axis)
     _ -> #(other_axis, last_axis)
@@ -210,7 +209,7 @@ fn hash_to_bits(
   case string.pop_grapheme(hash) {
     Error(Nil) -> Ok(acc)
     Ok(#(head, tail)) ->
-      case index_of(char: head, table: base32_alphabet) {
+      case index_of(char: ascii_lowercase(head), table: base32_alphabet) {
         Error(Nil) ->
           Error(InvalidCharacter(character: head, position: position))
         Ok(value) ->
@@ -244,6 +243,22 @@ fn decode_bits(
   }
 }
 
+// Lowercases `grapheme` only when it is an ASCII letter A-Z. Unicode
+// lowercasing would map other characters onto the alphabet, such as
+// KELVIN SIGN (U+212A) onto "k".
+fn ascii_lowercase(grapheme: String) -> String {
+  case string.to_utf_codepoints(grapheme) {
+    [codepoint] -> {
+      let code = string.utf_codepoint_to_int(codepoint)
+      case code >= 65 && code <= 90 {
+        True -> string.lowercase(grapheme)
+        False -> grapheme
+      }
+    }
+    _ -> grapheme
+  }
+}
+
 // Position of the single character `char` in `table`.
 fn index_of(char char: String, table table: String) -> Result(Int, Nil) {
   use #(before, _) <- result.map(string.split_once(table, char))
@@ -272,8 +287,10 @@ pub fn neighbor(
   hash: String,
   toward direction: Direction,
 ) -> Result(String, GeohashError) {
-  let lowered = string.lowercase(hash)
-  use _ <- result.try(hash_to_bits(hash: lowered, position: 0, acc: []))
+  use _ <- result.try(hash_to_bits(hash: hash, position: 0, acc: []))
+  // Every grapheme is now an alphabet character or its ASCII upper case.
+  let lowered =
+    string.to_graphemes(hash) |> list.map(ascii_lowercase) |> string.concat
   case direction {
     North -> step(hash: lowered, toward: ToNorth)
     South -> step(hash: lowered, toward: ToSouth)

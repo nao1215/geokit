@@ -279,6 +279,41 @@ pub fn neighbors_rejects_invalid_char_test() -> Nil {
   |> should.equal(Error(geohash.InvalidCharacter(character: "l", position: 1)))
 }
 
+pub fn decode_rejects_kelvin_sign_test() -> Nil {
+  // KELVIN SIGN (U+212A) lowercases to "k" under Unicode rules, but it
+  // is not an ASCII letter and must not be read as one.
+  geohash.decode("\u{212A}")
+  |> should.equal(
+    Error(geohash.InvalidCharacter(character: "\u{212A}", position: 0)),
+  )
+  geohash.decode_bounds("xn\u{212A}")
+  |> result.is_error
+  |> should.be_true
+  geohash.neighbor("xn\u{212A}", toward: geohash.North)
+  |> should.equal(
+    Error(geohash.InvalidCharacter(character: "\u{212A}", position: 2)),
+  )
+  geohash.neighbors("\u{212A}")
+  |> result.is_error
+  |> should.be_true
+}
+
+pub fn decode_upper_case_matches_lower_case_test() -> Nil {
+  geohash.decode("XN76URX6")
+  |> should.equal(geohash.decode("xn76urx6"))
+  geohash.decode_bounds("XN76URX6")
+  |> should.equal(geohash.decode_bounds("xn76urx6"))
+  geohash.neighbor("XN76URX6", toward: geohash.North)
+  |> should.equal(Ok("xn76urx7"))
+}
+
+pub fn invalid_character_reports_original_case_test() -> Nil {
+  geohash.decode("XN7A")
+  |> should.equal(Error(geohash.InvalidCharacter(character: "A", position: 3)))
+  geohash.neighbor("XN7A", toward: geohash.East)
+  |> should.equal(Error(geohash.InvalidCharacter(character: "A", position: 3)))
+}
+
 fn geohash_bounds(
   hash: String,
 ) -> Result(#(LatLng, LatLng), geohash.GeohashError) {
