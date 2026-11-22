@@ -131,3 +131,35 @@ pub fn equal_distinguishes_different_values_test() -> Nil {
   )
   |> should.be_true
 }
+
+// --- non-finite input (JavaScript only) ---------------------------------
+// Erlang floats cannot hold Infinity or NaN: the arithmetic that would
+// produce them raises instead.
+
+@target(javascript)
+fn infinity() -> Float {
+  1.0e308 *. 10.0
+}
+
+@target(javascript)
+pub fn new_rejects_nan_test() -> Nil {
+  let nan = infinity() -. infinity()
+  let assert Error(_) = latlng.new(lat: nan, lng: 0.0)
+  let assert Error(_) = latlng.new(lat: 0.0, lng: nan)
+  let assert Error(_) = latlng.new(lat: infinity(), lng: 0.0)
+  Nil
+}
+
+@target(javascript)
+pub fn wrap_non_finite_test() -> Nil {
+  let nan = infinity() -. infinity()
+  let p = latlng.wrap(lat: infinity(), lng: infinity())
+  #(latlng.lat(p), latlng.lng(p))
+  |> should.equal(#(90.0, 0.0))
+  let p = latlng.wrap(lat: 0.0 -. infinity(), lng: nan)
+  #(latlng.lat(p), latlng.lng(p))
+  |> should.equal(#(-90.0, 0.0))
+  let p = latlng.wrap(lat: nan, lng: 10.0)
+  #(latlng.lat(p), latlng.lng(p))
+  |> should.equal(#(0.0, 10.0))
+}
