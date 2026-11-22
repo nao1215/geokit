@@ -33,8 +33,8 @@ import metamon/generator/range
 
 import geokit.{type LatLng}
 import geokit/geohash
-import geokit/mercator
 import geokit/polyline
+import geokit/tile
 
 // --- Generators ----------------------------------------------------------
 
@@ -88,7 +88,7 @@ fn precision_gen() -> generator.Generator(Int) {
   generator.int(range.constant(1, 12))
 }
 
-fn tile_gen() -> generator.Generator(mercator.Tile) {
+fn tile_gen() -> generator.Generator(tile.Tile) {
   // Zoom 1..20; zoom 0 has the empty quadkey, covered by mercator_test.
   generator.bind(generator.int(range.constant(1, 20)), fn(z) {
     let max_coord = pow2(z) - 1
@@ -96,7 +96,7 @@ fn tile_gen() -> generator.Generator(mercator.Tile) {
       generator.int(range.constant(0, max_coord)),
       generator.int(range.constant(0, max_coord)),
       fn(x, y) {
-        let assert Ok(t) = mercator.new(zoom: z, x: x, y: y)
+        let assert Ok(t) = tile.new(zoom: z, x: x, y: y)
         t
       },
     )
@@ -452,13 +452,13 @@ pub fn pbt_mercator_quadkey_round_trip_test() -> Nil {
   metamon.forall(tile_gen(), fn(t) { quadkey_round_trip_ok(t) })
 }
 
-fn quadkey_round_trip_ok(t: mercator.Tile) -> Bool {
-  let qk = mercator.to_quadkey(tile: t)
-  case mercator.from_quadkey(quadkey: qk) {
+fn quadkey_round_trip_ok(t: tile.Tile) -> Bool {
+  let qk = tile.to_quadkey(t)
+  case tile.from_quadkey(qk) {
     Ok(decoded) ->
-      mercator.zoom(tile: decoded) == mercator.zoom(tile: t)
-      && mercator.x(tile: decoded) == mercator.x(tile: t)
-      && mercator.y(tile: decoded) == mercator.y(tile: t)
+      tile.zoom(decoded) == tile.zoom(t)
+      && tile.x(decoded) == tile.x(t)
+      && tile.y(decoded) == tile.y(t)
     Error(_) -> False
   }
 }
@@ -471,15 +471,15 @@ pub fn pbt_mercator_from_lat_lng_preserves_zoom_test() -> Nil {
 }
 
 fn from_lat_lng_preserves_zoom(p: LatLng, z: Int) -> Bool {
-  case mercator.from_lat_lng(point: p, zoom: z) {
-    Ok(t) -> mercator.zoom(tile: t) == z
+  case tile.from_lat_lng(p, zoom: z) {
+    Ok(t) -> tile.zoom(t) == z
     Error(_) -> False
   }
 }
 
 pub fn pbt_mercator_quadkey_length_equals_zoom_test() -> Nil {
   metamon.forall(tile_gen(), fn(t) {
-    string.length(mercator.to_quadkey(tile: t)) == mercator.zoom(tile: t)
+    string.length(tile.to_quadkey(t)) == tile.zoom(t)
   })
 }
 
@@ -494,15 +494,15 @@ pub fn pbt_mercator_lat_lng_round_trip_within_tile_test() -> Nil {
 }
 
 fn round_trip_within_tile_ok(p: LatLng, z: Int) -> Bool {
-  case mercator.from_lat_lng(point: p, zoom: z) {
+  case tile.from_lat_lng(p, zoom: z) {
     Error(_) -> False
     Ok(t) -> tile_contains(t, p)
   }
 }
 
-fn tile_contains(t: mercator.Tile, p: LatLng) -> Bool {
-  let nw = mercator.to_lat_lng(tile: t)
-  let pair = mercator.bounds(tile: t)
+fn tile_contains(t: tile.Tile, p: LatLng) -> Bool {
+  let nw = north_west(t)
+  let pair = tile_bounds(t)
   let lat_in =
     geokit.latitude(pair.0) -. 0.0001 <=. geokit.latitude(p)
     && geokit.latitude(p) <=. geokit.latitude(nw) +. 0.0001
@@ -687,4 +687,17 @@ fn geohash_bounds(
 fn encode5(points: List(LatLng)) -> String {
   let assert Ok(encoded) = polyline.encode(points, precision: 5)
   encoded
+}
+
+fn tile_bounds(t: tile.Tile) -> #(LatLng, LatLng) {
+  let box = tile.bounds(t)
+  #(box.south_west, box.north_east)
+}
+
+fn north_west(t: tile.Tile) -> LatLng {
+  let box = tile.bounds(t)
+  geokit.wrap_lat_lng(
+    latitude: geokit.latitude(box.north_east),
+    longitude: geokit.longitude(box.south_west),
+  )
 }

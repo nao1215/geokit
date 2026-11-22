@@ -24,7 +24,7 @@ import metamon/relation
 import metamon/transform
 
 import geokit.{type LatLng}
-import geokit/mercator
+import geokit/tile
 
 type Pair =
   #(LatLng, LatLng)
@@ -179,14 +179,14 @@ pub fn child_tile_extends_the_parent_quadkey_test() -> Nil {
     fn(input) {
       let #(p, zoom) = input
       case
-        mercator.from_lat_lng(point: p, zoom: zoom),
-        mercator.from_lat_lng(point: p, zoom: zoom + 1)
+        tile.from_lat_lng(p, zoom: zoom),
+        tile.from_lat_lng(p, zoom: zoom + 1)
       {
         Ok(parent), Ok(child) -> {
-          let parent_key = mercator.to_quadkey(tile: parent)
-          let child_key = mercator.to_quadkey(tile: child)
-          mercator.x(tile: child) / 2 == mercator.x(tile: parent)
-          && mercator.y(tile: child) / 2 == mercator.y(tile: parent)
+          let parent_key = tile.to_quadkey(parent)
+          let child_key = tile.to_quadkey(child)
+          tile.x(child) / 2 == tile.x(parent)
+          && tile.y(child) / 2 == tile.y(parent)
           && string.starts_with(child_key, parent_key)
           && string.length(child_key) == string.length(parent_key) + 1
         }

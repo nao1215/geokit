@@ -71,4 +71,4 @@ unwrap_used = "error"
 "src/geokit/internal/*.gleam" = ["short_variable_name"]
 "src/geokit/geohash.gleam" = ["short_variable_name"]
 "src/geokit/polyline.gleam" = ["short_variable_name"]
-"src/geokit/mercator.gleam" = ["short_variable_name"]
+"src/geokit/tile.gleam" = ["short_variable_name"]

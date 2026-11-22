@@ -15,8 +15,8 @@ import gleeunit/should
 import geokit.{type LatLng}
 import geokit/geohash
 import geokit/geojson
-import geokit/mercator
 import geokit/polyline
+import geokit/tile
 
 // --- helpers -------------------------------------------------------------
 
@@ -194,12 +194,8 @@ pub fn readme_parse_collection_test() -> Nil {
 
 pub fn tokyo_tile_at_zoom_5() -> #(Int, Int, String) {
   let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-  let assert Ok(tile) = mercator.from_lat_lng(point: tokyo, zoom: 5)
-  #(
-    mercator.x(tile: tile),
-    mercator.y(tile: tile),
-    mercator.to_quadkey(tile: tile),
-  )
+  let assert Ok(tile) = tile.from_lat_lng(tokyo, zoom: 5)
+  #(tile.x(tile), tile.y(tile), tile.to_quadkey(tile))
 }
 
 pub fn readme_tokyo_tile_at_zoom_5_test() -> Nil {

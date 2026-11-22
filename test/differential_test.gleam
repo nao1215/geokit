@@ -24,8 +24,8 @@ import gleeunit/should
 
 import geokit.{type LatLng}
 import geokit/geohash
-import geokit/mercator
 import geokit/polyline
+import geokit/tile
 
 // --- helpers --------------------------------------------------------------
 
@@ -499,76 +499,76 @@ pub fn diff_polyline_round_trip_10_points_test() -> Nil {
 
 pub fn diff_mercator_tokyo_z0_test() -> Nil {
   let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-  let assert Ok(t) = mercator.from_lat_lng(point: tokyo, zoom: 0)
-  mercator.x(tile: t) |> should.equal(0)
-  mercator.y(tile: t) |> should.equal(0)
+  let assert Ok(t) = tile.from_lat_lng(tokyo, zoom: 0)
+  tile.x(t) |> should.equal(0)
+  tile.y(t) |> should.equal(0)
 }
 
 pub fn diff_mercator_tokyo_z5_test() -> Nil {
   // OSM formula: x=28, y=12 at zoom 5.
   let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-  let assert Ok(t) = mercator.from_lat_lng(point: tokyo, zoom: 5)
-  mercator.x(tile: t) |> should.equal(28)
-  mercator.y(tile: t) |> should.equal(12)
+  let assert Ok(t) = tile.from_lat_lng(tokyo, zoom: 5)
+  tile.x(t) |> should.equal(28)
+  tile.y(t) |> should.equal(12)
 }
 
 pub fn diff_mercator_tokyo_z10_test() -> Nil {
   let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-  let assert Ok(t) = mercator.from_lat_lng(point: tokyo, zoom: 10)
-  mercator.x(tile: t) |> should.equal(909)
-  mercator.y(tile: t) |> should.equal(403)
+  let assert Ok(t) = tile.from_lat_lng(tokyo, zoom: 10)
+  tile.x(t) |> should.equal(909)
+  tile.y(t) |> should.equal(403)
 }
 
 pub fn diff_mercator_tokyo_z14_test() -> Nil {
   let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-  let assert Ok(t) = mercator.from_lat_lng(point: tokyo, zoom: 14)
-  mercator.x(tile: t) |> should.equal(14_552)
-  mercator.y(tile: t) |> should.equal(6451)
+  let assert Ok(t) = tile.from_lat_lng(tokyo, zoom: 14)
+  tile.x(t) |> should.equal(14_552)
+  tile.y(t) |> should.equal(6451)
 }
 
 pub fn diff_mercator_tokyo_z18_test() -> Nil {
   let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-  let assert Ok(t) = mercator.from_lat_lng(point: tokyo, zoom: 18)
-  mercator.x(tile: t) |> should.equal(232_847)
-  mercator.y(tile: t) |> should.equal(103_226)
+  let assert Ok(t) = tile.from_lat_lng(tokyo, zoom: 18)
+  tile.x(t) |> should.equal(232_847)
+  tile.y(t) |> should.equal(103_226)
 }
 
 pub fn diff_mercator_london_z14_test() -> Nil {
   let assert Ok(london) = geokit.lat_lng(latitude: 51.5074, longitude: -0.1278)
-  let assert Ok(t) = mercator.from_lat_lng(point: london, zoom: 14)
-  mercator.x(tile: t) |> should.equal(8186)
-  mercator.y(tile: t) |> should.equal(5448)
+  let assert Ok(t) = tile.from_lat_lng(london, zoom: 14)
+  tile.x(t) |> should.equal(8186)
+  tile.y(t) |> should.equal(5448)
 }
 
 pub fn diff_mercator_nyc_z14_test() -> Nil {
   // OSM formula: (4823, 6160).
   let assert Ok(nyc) = geokit.lat_lng(latitude: 40.7128, longitude: -74.006)
-  let assert Ok(t) = mercator.from_lat_lng(point: nyc, zoom: 14)
-  mercator.x(tile: t) |> should.equal(4823)
-  mercator.y(tile: t) |> should.equal(6160)
+  let assert Ok(t) = tile.from_lat_lng(nyc, zoom: 14)
+  tile.x(t) |> should.equal(4823)
+  tile.y(t) |> should.equal(6160)
 }
 
 pub fn diff_mercator_quadkey_tokyo_z5_test() -> Nil {
-  let assert Ok(t) = mercator.new(zoom: 5, x: 28, y: 12)
-  mercator.to_quadkey(tile: t)
+  let assert Ok(t) = tile.new(zoom: 5, x: 28, y: 12)
+  tile.to_quadkey(t)
   |> should.equal("13300")
 }
 
 pub fn diff_mercator_quadkey_tokyo_z14_test() -> Nil {
-  let assert Ok(t) = mercator.new(zoom: 14, x: 14_552, y: 6451)
-  mercator.to_quadkey(tile: t)
+  let assert Ok(t) = tile.new(zoom: 14, x: 14_552, y: 6451)
+  tile.to_quadkey(t)
   |> should.equal("13300211231022")
 }
 
 pub fn diff_mercator_quadkey_london_z14_test() -> Nil {
-  let assert Ok(t) = mercator.new(zoom: 14, x: 8186, y: 5448)
-  mercator.to_quadkey(tile: t)
+  let assert Ok(t) = tile.new(zoom: 14, x: 8186, y: 5448)
+  tile.to_quadkey(t)
   |> should.equal("03131313113010")
 }
 
 pub fn diff_mercator_tile_nw_z0_test() -> Nil {
-  let assert Ok(t) = mercator.new(zoom: 0, x: 0, y: 0)
-  let nw = mercator.to_lat_lng(tile: t)
+  let assert Ok(t) = tile.new(zoom: 0, x: 0, y: 0)
+  let nw = north_west(t)
   approx(geokit.latitude(nw), 85.051_128, 0.000_001)
   |> should.be_true
   approx(geokit.longitude(nw), -180.0, 0.000_001)
@@ -577,8 +577,8 @@ pub fn diff_mercator_tile_nw_z0_test() -> Nil {
 
 pub fn diff_mercator_tile_nw_tokyo_z14_test() -> Nil {
   // OSM: tile_to_latlng_nw(14, 14552, 6451) = (35.692995, 139.746094)
-  let assert Ok(t) = mercator.new(zoom: 14, x: 14_552, y: 6451)
-  let nw = mercator.to_lat_lng(tile: t)
+  let assert Ok(t) = tile.new(zoom: 14, x: 14_552, y: 6451)
+  let nw = north_west(t)
   approx(geokit.latitude(nw), 35.692_995, 0.000_01)
   |> should.be_true
   approx(geokit.longitude(nw), 139.746_094, 0.000_01)
@@ -586,68 +586,68 @@ pub fn diff_mercator_tile_nw_tokyo_z14_test() -> Nil {
 }
 
 pub fn diff_mercator_quadkey_round_trip_z18_test() -> Nil {
-  let assert Ok(t) = mercator.new(zoom: 18, x: 232_847, y: 103_226)
-  let qk = mercator.to_quadkey(tile: t)
-  let assert Ok(decoded) = mercator.from_quadkey(quadkey: qk)
-  mercator.zoom(tile: decoded) |> should.equal(18)
-  mercator.x(tile: decoded) |> should.equal(232_847)
-  mercator.y(tile: decoded) |> should.equal(103_226)
+  let assert Ok(t) = tile.new(zoom: 18, x: 232_847, y: 103_226)
+  let qk = tile.to_quadkey(t)
+  let assert Ok(decoded) = tile.from_quadkey(qk)
+  tile.zoom(decoded) |> should.equal(18)
+  tile.x(decoded) |> should.equal(232_847)
+  tile.y(decoded) |> should.equal(103_226)
 }
 
 pub fn diff_mercator_quadkey_rejects_letter_test() -> Nil {
   // Quadkey alphabet is {0,1,2,3}.
-  case mercator.from_quadkey(quadkey: "12a3") {
-    Error(mercator.InvalidQuadkeyChar(char: "a", position: 2)) -> Nil
+  case tile.from_quadkey("12a3") {
+    Error(tile.InvalidQuadkeyCharacter(character: "a", position: 2)) -> Nil
     _ -> should.be_true(False)
   }
 }
 
 pub fn diff_mercator_quadkey_rejects_digit_above_3_test() -> Nil {
-  case mercator.from_quadkey(quadkey: "1245") {
-    Error(mercator.InvalidQuadkeyChar(char: "4", position: 2)) -> Nil
+  case tile.from_quadkey("1245") {
+    Error(tile.InvalidQuadkeyCharacter(character: "4", position: 2)) -> Nil
     _ -> should.be_true(False)
   }
 }
 
 pub fn diff_mercator_zoom_zero_single_tile_test() -> Nil {
   let assert Ok(p) = geokit.lat_lng(latitude: 45.0, longitude: 90.0)
-  let assert Ok(t) = mercator.from_lat_lng(point: p, zoom: 0)
-  mercator.x(tile: t) |> should.equal(0)
-  mercator.y(tile: t) |> should.equal(0)
-  mercator.to_quadkey(tile: t) |> should.equal("")
+  let assert Ok(t) = tile.from_lat_lng(p, zoom: 0)
+  tile.x(t) |> should.equal(0)
+  tile.y(t) |> should.equal(0)
+  tile.to_quadkey(t) |> should.equal("")
 }
 
 pub fn diff_mercator_zoom_30_extreme_test() -> Nil {
   // 2^29 = 536_870_912 — lng=0 lands at x = 2^29 at zoom 30.
   let assert Ok(p) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
-  let assert Ok(t) = mercator.from_lat_lng(point: p, zoom: 30)
-  mercator.zoom(tile: t) |> should.equal(30)
-  mercator.x(tile: t) |> should.equal(536_870_912)
+  let assert Ok(t) = tile.from_lat_lng(p, zoom: 30)
+  tile.zoom(t) |> should.equal(30)
+  tile.x(t) |> should.equal(536_870_912)
 }
 
 pub fn diff_mercator_north_pole_clamps_test() -> Nil {
   // Latitude 90 clamps to the Mercator pole limit → y = 0.
   let assert Ok(p) = geokit.lat_lng(latitude: 90.0, longitude: 0.0)
-  let assert Ok(t) = mercator.from_lat_lng(point: p, zoom: 5)
-  mercator.y(tile: t) |> should.equal(0)
+  let assert Ok(t) = tile.from_lat_lng(p, zoom: 5)
+  tile.y(t) |> should.equal(0)
 }
 
 pub fn diff_mercator_south_pole_clamps_test() -> Nil {
   // Latitude -90 clamps → y = 2^zoom - 1.
   let assert Ok(p) = geokit.lat_lng(latitude: -90.0, longitude: 0.0)
-  let assert Ok(t) = mercator.from_lat_lng(point: p, zoom: 5)
-  mercator.y(tile: t) |> should.equal(31)
+  let assert Ok(t) = tile.from_lat_lng(p, zoom: 5)
+  tile.y(t) |> should.equal(31)
 }
 
 pub fn diff_mercator_max_tile_x_test() -> Nil {
-  let assert Ok(t) = mercator.new(zoom: 5, x: 31, y: 31)
-  mercator.x(tile: t) |> should.equal(31)
-  mercator.y(tile: t) |> should.equal(31)
+  let assert Ok(t) = tile.new(zoom: 5, x: 31, y: 31)
+  tile.x(t) |> should.equal(31)
+  tile.y(t) |> should.equal(31)
 }
 
 pub fn diff_mercator_out_of_range_tile_test() -> Nil {
-  case mercator.new(zoom: 5, x: 32, y: 0) {
-    Error(mercator.TileCoordOutOfRange(zoom: 5, x: 32, y: 0)) -> Nil
+  case tile.new(zoom: 5, x: 32, y: 0) {
+    Error(tile.CoordinateOutOfRange(zoom: 5, x: 32, y: 0)) -> Nil
     _ -> should.be_true(False)
   }
 }
@@ -800,4 +800,12 @@ fn geohash_bounds(
 fn encode5(points: List(LatLng)) -> String {
   let assert Ok(encoded) = polyline.encode(points, precision: 5)
   encoded
+}
+
+fn north_west(t: tile.Tile) -> LatLng {
+  let box = tile.bounds(t)
+  geokit.wrap_lat_lng(
+    latitude: geokit.latitude(box.north_east),
+    longitude: geokit.longitude(box.south_west),
+  )
 }
