@@ -87,89 +87,50 @@ pub fn encode(
     when: precision < 1 || precision > 12,
     return: Error(PrecisionOutOfRange(precision: precision)),
   )
-  let target_bits = precision * 5
   let bits =
     encode_bits(
-      lat_min: -90.0,
-      lat_max: 90.0,
-      lng_min: -180.0,
-      lng_max: 180.0,
-      lat: latlng.lat(point),
-      lng: latlng.lng(point),
-      remaining: target_bits,
-      use_lng: True,
+      current: #(latlng.lng(point), #(-180.0, 180.0)),
+      other: #(latlng.lat(point), #(-90.0, 90.0)),
+      remaining: precision * 5,
       acc: [],
     )
   Ok(bits_to_base32(list.reverse(bits), ""))
 }
 
+// Bits alternate between the axes, longitude first: each step bisects
+// `current` (a coordinate and its interval) and then swaps the axes.
 fn encode_bits(
-  lat_min lat_min: Float,
-  lat_max lat_max: Float,
-  lng_min lng_min: Float,
-  lng_max lng_max: Float,
-  lat lat: Float,
-  lng lng: Float,
+  current current: #(Float, #(Float, Float)),
+  other other: #(Float, #(Float, Float)),
   remaining remaining: Int,
-  use_lng use_lng: Bool,
   acc acc: List(Int),
 ) -> List(Int) {
-  use <- bool.guard(when: remaining <= 0, return: acc)
-  case use_lng {
-    True -> {
-      let mid = { lng_min +. lng_max } /. 2.0
-      let go_high = lng >=. mid
-      let new_min = case go_high {
-        True -> mid
-        False -> lng_min
-      }
-      let new_max = case go_high {
-        True -> lng_max
-        False -> mid
-      }
-      let bit = case go_high {
+  case remaining {
+    0 -> acc
+    _ -> {
+      let #(value, #(min, max)) = current
+      // The midpoint belongs to the upper half.
+      let bit = case value >=. { min +. max } /. 2.0 {
         True -> 1
         False -> 0
       }
       encode_bits(
-        lat_min: lat_min,
-        lat_max: lat_max,
-        lng_min: new_min,
-        lng_max: new_max,
-        lat: lat,
-        lng: lng,
+        current: other,
+        other: #(value, halve(bit: bit, range: #(min, max))),
         remaining: remaining - 1,
-        use_lng: False,
         acc: [bit, ..acc],
       )
     }
-    False -> {
-      let mid = { lat_min +. lat_max } /. 2.0
-      let go_high = lat >=. mid
-      let new_min = case go_high {
-        True -> mid
-        False -> lat_min
-      }
-      let new_max = case go_high {
-        True -> lat_max
-        False -> mid
-      }
-      let bit = case go_high {
-        True -> 1
-        False -> 0
-      }
-      encode_bits(
-        lat_min: new_min,
-        lat_max: new_max,
-        lng_min: lng_min,
-        lng_max: lng_max,
-        lat: lat,
-        lng: lng,
-        remaining: remaining - 1,
-        use_lng: True,
-        acc: [bit, ..acc],
-      )
-    }
+  }
+}
+
+// The upper half of `range` for bit 1, the lower half for bit 0.
+fn halve(bit bit: Int, range range: #(Float, Float)) -> #(Float, Float) {
+  let #(min, max) = range
+  let mid = { min +. max } /. 2.0
+  case bit {
+    1 -> #(mid, max)
+    _ -> #(min, mid)
   }
 }
 
@@ -177,11 +138,7 @@ fn bits_to_base32(bits: List(Int), acc: String) -> String {
   case bits {
     [b0, b1, b2, b3, b4, ..rest] -> {
       let value = b0 * 16 + b1 * 8 + b2 * 4 + b3 * 2 + b4
-      let char = case string.slice(base32_alphabet, value, 1) {
-        "" -> "0"
-        ch -> ch
-      }
-      bits_to_base32(rest, acc <> char)
+      bits_to_base32(rest, acc <> string.slice(base32_alphabet, value, 1))
     }
     _ -> acc
   }
@@ -219,15 +176,19 @@ pub fn decode_bounds(
   let normalised = string.lowercase(hash)
   use <- bool.guard(when: normalised == "", return: Error(EmptyHash))
   use bits <- result.try(hash_to_bits(hash: normalised, position: 0, acc: []))
-  let #(lat_min, lat_max, lng_min, lng_max) =
-    decode_bits(
-      bits: list.reverse(bits),
-      lat_min: -90.0,
-      lat_max: 90.0,
-      lng_min: -180.0,
-      lng_max: 180.0,
-      use_lng: True,
-    )
+  let #(last_axis, other_axis) =
+    decode_bits(bits: list.reverse(bits), current: #(-180.0, 180.0), other: #(
+      -90.0,
+      90.0,
+    ))
+  // Each character is 5 bits, so an even-length hash has an even number
+  // of bits and the axes end where they started (longitude current).
+  let #(#(lng_min, lng_max), #(lat_min, lat_max)) = case
+    string.length(normalised) % 2
+  {
+    0 -> #(last_axis, other_axis)
+    _ -> #(other_axis, last_axis)
+  }
   Ok(#(
     latlng.wrap(lat: lat_min, lng: lng_min),
     latlng.wrap(lat: lat_max, lng: lng_max),
@@ -242,7 +203,7 @@ fn hash_to_bits(
   case string.pop_grapheme(hash) {
     Error(Nil) -> Ok(acc)
     Ok(#(head, tail)) ->
-      case index_in_alphabet(char: head) {
+      case index_of(char: head, table: base32_alphabet) {
         Error(Nil) -> Error(InvalidCharacter(char: head, position: position))
         Ok(value) ->
           hash_to_bits(hash: tail, position: position + 1, acc: [
@@ -257,130 +218,31 @@ fn hash_to_bits(
   }
 }
 
+// The decoding counterpart of `encode_bits`: each bit halves the
+// interval of `current`, then the axes swap.
 fn decode_bits(
   bits bits: List(Int),
-  lat_min lat_min: Float,
-  lat_max lat_max: Float,
-  lng_min lng_min: Float,
-  lng_max lng_max: Float,
-  use_lng use_lng: Bool,
-) -> #(Float, Float, Float, Float) {
+  current current: #(Float, Float),
+  other other: #(Float, Float),
+) -> #(#(Float, Float), #(Float, Float)) {
   case bits {
-    [] -> #(lat_min, lat_max, lng_min, lng_max)
+    [] -> #(current, other)
     [bit, ..rest] ->
-      case use_lng {
-        True -> {
-          let mid = { lng_min +. lng_max } /. 2.0
-          case bit {
-            1 ->
-              decode_bits(
-                bits: rest,
-                lat_min: lat_min,
-                lat_max: lat_max,
-                lng_min: mid,
-                lng_max: lng_max,
-                use_lng: False,
-              )
-            _ ->
-              decode_bits(
-                bits: rest,
-                lat_min: lat_min,
-                lat_max: lat_max,
-                lng_min: lng_min,
-                lng_max: mid,
-                use_lng: False,
-              )
-          }
-        }
-        False -> {
-          let mid = { lat_min +. lat_max } /. 2.0
-          case bit {
-            1 ->
-              decode_bits(
-                bits: rest,
-                lat_min: mid,
-                lat_max: lat_max,
-                lng_min: lng_min,
-                lng_max: lng_max,
-                use_lng: True,
-              )
-            _ ->
-              decode_bits(
-                bits: rest,
-                lat_min: lat_min,
-                lat_max: mid,
-                lng_min: lng_min,
-                lng_max: lng_max,
-                use_lng: True,
-              )
-          }
-        }
-      }
-  }
-}
-
-fn index_in_alphabet(char char: String) -> Result(Int, Nil) {
-  index_in_alphabet_loop(needle: char, haystack: base32_alphabet, position: 0)
-}
-
-fn index_in_alphabet_loop(
-  needle needle: String,
-  haystack haystack: String,
-  position position: Int,
-) -> Result(Int, Nil) {
-  case string.pop_grapheme(haystack) {
-    Error(Nil) -> Error(Nil)
-    Ok(#(head, tail)) -> {
-      use <- bool.guard(when: head == needle, return: Ok(position))
-      index_in_alphabet_loop(
-        needle: needle,
-        haystack: tail,
-        position: position + 1,
+      decode_bits(
+        bits: rest,
+        current: other,
+        other: halve(bit: bit, range: current),
       )
-    }
   }
+}
+
+// Position of the single character `char` in `table`.
+fn index_of(char char: String, table table: String) -> Result(Int, Nil) {
+  use #(before, _) <- result.map(string.split_once(table, char))
+  string.length(before)
 }
 
 // --- Neighbours ----------------------------------------------------------
-
-// Adjacency tables (Niemeyer). The first row is for even-length
-// hashes, the second for odd-length hashes. `BORDER[d]` lists the
-// characters that, when seen as the last character of a hash of the
-// given parity, lie on the boundary of the parent cell in direction
-// `d` — in that case the neighbour is computed by recursing into the
-// parent.
-
-const neighbor_n_even: String = "p0r21436x8zb9dcf5h7kjnmqesgutwvy"
-
-const neighbor_n_odd: String = "bc01fg45238967deuvhjyznpkmstqrwx"
-
-const neighbor_e_even: String = "bc01fg45238967deuvhjyznpkmstqrwx"
-
-const neighbor_e_odd: String = "p0r21436x8zb9dcf5h7kjnmqesgutwvy"
-
-const neighbor_s_even: String = "14365h7k9dcfesgujnmqp0r2twvyx8zb"
-
-const neighbor_s_odd: String = "238967debc01fg45kmstqrwxuvhjyznp"
-
-const neighbor_w_even: String = "238967debc01fg45kmstqrwxuvhjyznp"
-
-const neighbor_w_odd: String = "14365h7k9dcfesgujnmqp0r2twvyx8zb"
-
-const border_n_even: String = "prxz"
-
-const border_n_odd: String = "bcfguvyz"
-
-const border_e_even: String = "bcfguvyz"
-
-const border_e_odd: String = "prxz"
-
-const border_s_even: String = "028b"
-
-const border_s_odd: String = "0145hjnp"
-
-const border_w_even: String = "0145hjnp"
-
-const border_w_odd: String = "028b"
 
 /// The neighbour of `hash` in the given [`Direction`](#Direction).
 ///
@@ -398,25 +260,17 @@ pub fn neighbor(
   direction direction: Direction,
 ) -> Result(String, GeohashError) {
   let normalised = string.lowercase(hash)
+  use _ <- result.try(hash_to_bits(hash: normalised, position: 0, acc: []))
   case direction {
-    North -> step(hash: normalised, direction: North)
-    South -> step(hash: normalised, direction: South)
-    East -> step(hash: normalised, direction: East)
-    West -> step(hash: normalised, direction: West)
-    NorthEast -> two_steps(hash: normalised, first: North, second: East)
-    NorthWest -> two_steps(hash: normalised, first: North, second: West)
-    SouthEast -> two_steps(hash: normalised, first: South, second: East)
-    SouthWest -> two_steps(hash: normalised, first: South, second: West)
+    North -> step(hash: normalised, toward: ToNorth)
+    South -> step(hash: normalised, toward: ToSouth)
+    East -> step(hash: normalised, toward: ToEast)
+    West -> step(hash: normalised, toward: ToWest)
+    NorthEast -> two_steps(hash: normalised, first: ToNorth, second: ToEast)
+    NorthWest -> two_steps(hash: normalised, first: ToNorth, second: ToWest)
+    SouthEast -> two_steps(hash: normalised, first: ToSouth, second: ToEast)
+    SouthWest -> two_steps(hash: normalised, first: ToSouth, second: ToWest)
   }
-}
-
-fn two_steps(
-  hash hash: String,
-  first first: Direction,
-  second second: Direction,
-) -> Result(String, GeohashError) {
-  use partial <- result.try(neighbor(hash: hash, direction: first))
-  neighbor(hash: partial, direction: second)
 }
 
 /// All eight neighbours of `hash`, returned as a
@@ -442,86 +296,76 @@ pub fn neighbors(hash hash: String) -> Result(Neighbors, GeohashError) {
   ))
 }
 
-fn step(
-  hash hash: String,
-  direction direction: Direction,
-) -> Result(String, GeohashError) {
-  use <- bool.guard(when: hash == "", return: Error(EmptyHash))
-  let length = string.length(hash)
-  let parent_length = length - 1
-  let parent = string.slice(hash, 0, parent_length)
-  let last = string.slice(hash, parent_length, 1)
-  // Per the Niemeyer adjacency algorithm the lookup table is keyed by
-  // `length % 2`: an even-length hash uses the "even" tables, an odd
-  // one the "odd" tables.
-  let is_even = length % 2 == 0
-  let border = border_table(direction: direction, is_even: is_even)
-  let lookup = neighbor_table(direction: direction, is_even: is_even)
-  let parent_result = case string.contains(border, last) {
-    True ->
-      case parent {
-        "" -> Error(EmptyHash)
-        _ -> step(hash: parent, direction: direction)
-      }
-    False -> Ok(parent)
-  }
-  use new_parent <- result.try(parent_result)
-  // The Niemeyer adjacency tables are keyed *by position within the
-  // neighbour string*: find the position of `last` in the neighbour
-  // table, and that position indexes the base32 alphabet to give the
-  // new character. (Not: find the base32 index of `last`, look up
-  // that position in the neighbour table — which is the easy
-  // mistake.)
-  case index_of_char_in(haystack: lookup, needle: last, position: 0) {
-    Error(Nil) -> Error(InvalidCharacter(char: last, position: parent_length))
-    Ok(value) -> Ok(new_parent <> string.slice(base32_alphabet, value, 1))
-  }
+// The four directions the adjacency tables cover. Diagonals are two
+// steps.
+type Cardinal {
+  ToNorth
+  ToSouth
+  ToEast
+  ToWest
 }
 
-fn index_of_char_in(
-  haystack haystack: String,
-  needle needle: String,
-  position position: Int,
-) -> Result(Int, Nil) {
-  case string.pop_grapheme(haystack) {
-    Error(Nil) -> Error(Nil)
-    Ok(#(head, tail)) -> {
-      use <- bool.guard(when: head == needle, return: Ok(position))
-      index_of_char_in(haystack: tail, needle: needle, position: position + 1)
+fn two_steps(
+  hash hash: String,
+  first first: Cardinal,
+  second second: Cardinal,
+) -> Result(String, GeohashError) {
+  use partial <- result.try(step(hash: hash, toward: first))
+  step(hash: partial, toward: second)
+}
+
+// `hash` is lower-case and every character is in the alphabet.
+fn step(
+  hash hash: String,
+  toward toward: Cardinal,
+) -> Result(String, GeohashError) {
+  case string.last(hash) {
+    Error(Nil) -> Error(EmptyHash)
+    Ok(last) -> {
+      let parent = string.drop_end(hash, 1)
+      // Per the Niemeyer adjacency algorithm the lookup table is keyed
+      // by `length % 2`: an even-length hash uses the "even" tables,
+      // an odd one the "odd" tables.
+      let #(lookup, border) =
+        tables(toward: toward, is_even: string.length(hash) % 2 == 0)
+      use new_parent <- result.try(case string.contains(border, last), parent {
+        False, _ -> Ok(parent)
+        // Crossing the antimeridian: the top-level cell wraps around,
+        // so the last character is looked up in the table as is.
+        True, "" if toward == ToEast || toward == ToWest -> Ok("")
+        // Crossing a pole has no neighbour.
+        True, "" -> Error(EmptyHash)
+        True, _ -> step(hash: parent, toward: toward)
+      })
+      // The Niemeyer adjacency tables are keyed *by position within
+      // the neighbour string*: find the position of `last` in the
+      // neighbour table, and that position indexes the base32
+      // alphabet to give the new character. (Not: find the base32
+      // index of `last`, look up that position in the neighbour table
+      // — which is the easy mistake.)
+      case index_of(char: last, table: lookup) {
+        Error(Nil) ->
+          Error(InvalidCharacter(char: last, position: string.length(parent)))
+        Ok(value) -> Ok(new_parent <> string.slice(base32_alphabet, value, 1))
+      }
     }
   }
 }
 
-fn neighbor_table(
-  direction direction: Direction,
-  is_even is_even: Bool,
-) -> String {
-  case direction, is_even {
-    North, True -> neighbor_n_even
-    North, False -> neighbor_n_odd
-    East, True -> neighbor_e_even
-    East, False -> neighbor_e_odd
-    South, True -> neighbor_s_even
-    South, False -> neighbor_s_odd
-    West, True -> neighbor_w_even
-    West, False -> neighbor_w_odd
-    _, _ -> ""
-  }
-}
-
-fn border_table(
-  direction direction: Direction,
-  is_even is_even: Bool,
-) -> String {
-  case direction, is_even {
-    North, True -> border_n_even
-    North, False -> border_n_odd
-    East, True -> border_e_even
-    East, False -> border_e_odd
-    South, True -> border_s_even
-    South, False -> border_s_odd
-    West, True -> border_w_even
-    West, False -> border_w_odd
-    _, _ -> ""
+// Adjacency tables (Niemeyer): `#(neighbour, border)` for a direction
+// and the parity of the hash length. `border` lists the characters
+// that, as the last character of a hash, lie on the edge of the parent
+// cell in that direction; the neighbour is then computed from the
+// parent's neighbour.
+fn tables(toward toward: Cardinal, is_even is_even: Bool) -> #(String, String) {
+  case toward, is_even {
+    ToNorth, True -> #("p0r21436x8zb9dcf5h7kjnmqesgutwvy", "prxz")
+    ToNorth, False -> #("bc01fg45238967deuvhjyznpkmstqrwx", "bcfguvyz")
+    ToEast, True -> #("bc01fg45238967deuvhjyznpkmstqrwx", "bcfguvyz")
+    ToEast, False -> #("p0r21436x8zb9dcf5h7kjnmqesgutwvy", "prxz")
+    ToSouth, True -> #("14365h7k9dcfesgujnmqp0r2twvyx8zb", "028b")
+    ToSouth, False -> #("238967debc01fg45kmstqrwxuvhjyznp", "0145hjnp")
+    ToWest, True -> #("238967debc01fg45kmstqrwxuvhjyznp", "0145hjnp")
+    ToWest, False -> #("14365h7k9dcfesgujnmqp0r2twvyx8zb", "028b")
   }
 }

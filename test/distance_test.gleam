@@ -88,3 +88,14 @@ pub fn symmetric_test() -> Nil {
   approx_equal(d_ab, d_ba, 0.001)
   |> should.be_true
 }
+
+// --- tiny distances -------------------------------------------------------
+
+pub fn haversine_tiny_distance_test() -> Nil {
+  // 1e-9 degrees of latitude: R * 1e-9 * pi / 180 ~= 1.1119e-4 m.
+  let a = latlng.new_or_panic(lat: 0.0, lng: 0.0)
+  let b = latlng.new_or_panic(lat: 1.0e-9, lng: 0.0)
+  let expected = 6_371_008.8 *. 1.0e-9 *. 3.141592653589793 /. 180.0
+  approx_equal(distance.haversine(a: a, b: b), expected, expected *. 1.0e-9)
+  |> should.be_true
+}

@@ -1,4 +1,4 @@
-//// dig-bug round 2: property-based + metamorphic testing.
+//// Property-based and metamorphic tests.
 ////
 //// Generators and the test runner come from the `metamon` library;
 //// every test checks an invariant or a metamorphic relation that

@@ -18,6 +18,7 @@
 //// or its caricature".
 
 import gleam/bool
+import gleam/float
 import gleam/list
 import gleam/result
 
@@ -65,7 +66,7 @@ pub fn line_string(
     [] -> Ok([])
     [single] -> Ok([single])
     [a, b] -> Ok([a, b])
-    _ -> Ok(dp(points: points, tolerance: tolerance))
+    [first, ..rest] -> Ok(dp(first: first, rest: rest, tolerance: tolerance))
   }
 }
 
@@ -130,11 +131,135 @@ fn simplify_rings(
   case rings {
     [] -> Ok(list.reverse(acc))
     [head, ..tail] -> {
-      use simplified <- result.try(line_string(
-        points: head,
-        tolerance: tolerance,
-      ))
+      use simplified <- result.try(ring(points: head, tolerance: tolerance))
       simplify_rings(rings: tail, tolerance: tolerance, acc: [simplified, ..acc])
+    }
+  }
+}
+
+// A closed ring starts and ends at the same vertex, so Douglas-Peucker
+// over the whole ring would measure every point against a zero-length
+// chord and could keep only the closing pair. Split at the vertex
+// farthest from the start instead, simplify both halves and rejoin. A
+// result with fewer than four positions is not a valid ring, so it is
+// replaced by the smallest valid ring (see `smallest_ring`); a ring of
+// four positions or fewer is already that small and is kept. Unclosed
+// rings are simplified as a line.
+fn ring(
+  points points: List(LatLng),
+  tolerance tolerance: Float,
+) -> Result(List(LatLng), SimplifyError) {
+  case points, list.last(points) {
+    [first, second, third, fourth, ..more], Ok(last) ->
+      case latlng.equal(first, last) {
+        True ->
+          Ok(closed_ring(
+            ring: points,
+            first: first,
+            rest: [second, third, fourth, ..more],
+            tolerance: tolerance,
+          ))
+        False -> line_string(points: points, tolerance: tolerance)
+      }
+    _, _ -> line_string(points: points, tolerance: tolerance)
+  }
+}
+
+fn closed_ring(
+  ring ring: List(LatLng),
+  first first: LatLng,
+  rest rest: List(LatLng),
+  tolerance tolerance: Float,
+) -> List(LatLng) {
+  case farthest_from(origin: first, points: rest) {
+    Error(Nil) -> ring
+    Ok(#(before, pivot, after)) -> {
+      let left =
+        dp(
+          first: first,
+          rest: list.reverse([pivot, ..before]),
+          tolerance: tolerance,
+        )
+      let right = dp(first: pivot, rest: after, tolerance: tolerance)
+      let joined = list.append(left, list.drop(right, 1))
+      case list.length(joined) < 4 {
+        True ->
+          smallest_ring(
+            ring: ring,
+            first: first,
+            pivot: pivot,
+            before: before,
+            after: after,
+          )
+        False -> joined
+      }
+    }
+  }
+}
+
+// The fallback when both halves collapse: the start, the pivot and the
+// remaining vertex farthest from the chord between them, in ring order,
+// closed. Keeping only four positions means a larger tolerance never
+// yields a larger ring. `before` is reversed and `after` ends with the
+// closing vertex, which is not a candidate.
+fn smallest_ring(
+  ring ring: List(LatLng),
+  first first: LatLng,
+  pivot pivot: LatLng,
+  before before: List(LatLng),
+  after after: List(LatLng),
+) -> List(LatLng) {
+  use <- bool.guard(when: list.length(ring) <= 4, return: ring)
+  let after_open = list.take(after, list.length(after) - 1)
+  let best_before =
+    farthest_from_chord(points: list.reverse(before), a: first, b: pivot)
+  let best_after = farthest_from_chord(points: after_open, a: first, b: pivot)
+  case best_before, best_after {
+    Ok(#(d_before, v)), Ok(#(d_after, _)) if d_before >=. d_after -> [
+      first,
+      v,
+      pivot,
+      first,
+    ]
+    _, Ok(#(_, v)) -> [first, pivot, v, first]
+    Ok(#(_, v)), Error(Nil) -> [first, v, pivot, first]
+    Error(Nil), Error(Nil) -> ring
+  }
+}
+
+// The point of `points` farthest from the line `a`-`b` with its
+// distance, the earliest one on ties.
+fn farthest_from_chord(
+  points points: List(LatLng),
+  a a: LatLng,
+  b b: LatLng,
+) -> Result(#(Float, LatLng), Nil) {
+  list.fold(points, Error(Nil), fn(best, p) {
+    let distance = perpendicular_distance(p: p, a: a, b: b)
+    case best {
+      Ok(#(best_distance, _)) if best_distance >=. distance -> best
+      _ -> Ok(#(distance, p))
+    }
+  })
+}
+
+// The point of `points` farthest from `origin` (the earliest one on
+// ties), with the points before it (reversed) and after it.
+fn farthest_from(
+  origin origin: LatLng,
+  points points: List(LatLng),
+) -> Result(#(List(LatLng), LatLng, List(LatLng)), Nil) {
+  case points {
+    [] -> Error(Nil)
+    [head, ..tail] -> {
+      let #(_, before, pivot, after) =
+        farthest_loop(points: tail, a: origin, b: origin, seen: [head], best: #(
+          perpendicular_distance(p: head, a: origin, b: origin),
+          [],
+          head,
+          tail,
+        ))
+      Ok(#(before, pivot, after))
     }
   }
 }
@@ -158,81 +283,99 @@ fn simplify_polygons(
   }
 }
 
-fn dp(points points: List(LatLng), tolerance tolerance: Float) -> List(LatLng) {
-  let length = list.length(points)
-  case length <= 2 {
-    True -> points
-    False -> {
-      let first = first_or_default(points)
-      let last = last_or_default(points, first)
-      let middle = middle_of(points)
-      let #(max_dist, max_index) =
-        max_perp_distance(
-          middle: middle,
-          a: first,
-          b: last,
-          index: 1,
-          best_dist: 0.0,
-          best_index: 0,
-        )
-      case max_dist >. tolerance {
-        True -> {
-          let left_part = list.take(points, max_index + 1)
-          let right_part = list.drop(points, max_index)
-          let left = dp(points: left_part, tolerance: tolerance)
-          let right = dp(points: right_part, tolerance: tolerance)
-          merge_skipping_duplicate_pivot(left, right)
-        }
-        False -> [first, last]
+// A span of the input between two kept points: `first`, the points in
+// between (in input order) and `last`.
+type Span {
+  Span(first: LatLng, middle: List(LatLng), last: LatLng)
+}
+
+// Douglas-Peucker with an explicit stack of spans instead of recursion,
+// so a split that peels one point per level (a zigzag) cannot exhaust
+// the stack on JavaScript. Spans are processed left to right; when a
+// span needs no split its `first` is kept, and the input's last point
+// closes the output.
+fn dp(
+  first first: LatLng,
+  rest rest: List(LatLng),
+  tolerance tolerance: Float,
+) -> List(LatLng) {
+  case list.reverse(rest) {
+    [] -> [first]
+    [last, ..middle_reversed] ->
+      dp_loop(
+        stack: [Span(first:, middle: list.reverse(middle_reversed), last:)],
+        tolerance: tolerance,
+        kept: [],
+        end: last,
+      )
+  }
+}
+
+fn dp_loop(
+  stack stack: List(Span),
+  tolerance tolerance: Float,
+  kept kept: List(LatLng),
+  end end: LatLng,
+) -> List(LatLng) {
+  case stack {
+    [] -> list.reverse([end, ..kept])
+    [span, ..rest] ->
+      case farthest(span: span) {
+        Ok(#(distance, left, right)) if distance >. tolerance ->
+          dp_loop(stack: [left, right, ..rest], tolerance:, kept:, end:)
+        _ -> dp_loop(stack: rest, tolerance:, kept: [span.first, ..kept], end:)
       }
+  }
+}
+
+// One pass over `span.middle` that finds the point farthest from the
+// chord `first`-`last` (the earliest one on ties) and returns its
+// distance with the two spans either side of it. The prefix before the
+// candidate is the reversed accumulator at the moment it was found and
+// the suffix is the remaining tail, so no second pass is needed to
+// split. Returns `Error(Nil)` when the span has no middle points.
+fn farthest(span span: Span) -> Result(#(Float, Span, Span), Nil) {
+  case span.middle {
+    [] -> Error(Nil)
+    [head, ..tail] -> {
+      let #(distance, before, pivot, after) =
+        farthest_loop(
+          points: tail,
+          a: span.first,
+          b: span.last,
+          seen: [head],
+          best: #(
+            perpendicular_distance(p: head, a: span.first, b: span.last),
+            [],
+            head,
+            tail,
+          ),
+        )
+      Ok(#(
+        distance,
+        Span(first: span.first, middle: list.reverse(before), last: pivot),
+        Span(first: pivot, middle: after, last: span.last),
+      ))
     }
   }
 }
 
-fn merge_skipping_duplicate_pivot(
-  left: List(LatLng),
-  right: List(LatLng),
-) -> List(LatLng) {
-  // The last element of `left` and the first element of `right` are
-  // the same pivot point; concatenate but drop the duplicate.
-  case right {
-    [] -> left
-    [_, ..tail] -> list.append(left, tail)
-  }
-}
-
-fn max_perp_distance(
-  middle middle: List(LatLng),
+fn farthest_loop(
+  points points: List(LatLng),
   a a: LatLng,
   b b: LatLng,
-  index index: Int,
-  best_dist best_dist: Float,
-  best_index best_index: Int,
-) -> #(Float, Int) {
-  case middle {
-    [] -> #(best_dist, best_index)
+  seen seen: List(LatLng),
+  best best: #(Float, List(LatLng), LatLng, List(LatLng)),
+) -> #(Float, List(LatLng), LatLng, List(LatLng)) {
+  case points {
+    [] -> best
     [head, ..tail] -> {
-      let d = perpendicular_distance(p: head, a: a, b: b)
-      case d >. best_dist {
-        True ->
-          max_perp_distance(
-            middle: tail,
-            a: a,
-            b: b,
-            index: index + 1,
-            best_dist: d,
-            best_index: index,
-          )
-        False ->
-          max_perp_distance(
-            middle: tail,
-            a: a,
-            b: b,
-            index: index + 1,
-            best_dist: best_dist,
-            best_index: best_index,
-          )
+      let distance = perpendicular_distance(p: head, a: a, b: b)
+      let best = case distance >. best.0 {
+        True -> #(distance, seen, head, tail)
+        False -> best
       }
+      farthest_loop(points: tail, a: a, b: b, seen: [head, ..seen], best: best)
     }
   }
 }
@@ -255,62 +398,16 @@ fn perpendicular_distance(p p: LatLng, a a: LatLng, b b: LatLng) -> Float {
     }
     False -> {
       let cross = { x -. x1 } *. dy -. { y -. y1 } *. dx
-      let abs_cross = case cross <. 0.0 {
-        True -> 0.0 -. cross
-        False -> cross
-      }
-      abs_cross /. sqrt_nonneg(length_squared)
+      float.absolute_value(cross) /. sqrt_nonneg(length_squared)
     }
   }
 }
 
+// Callers pass sums of squares, so the input is non-negative and
+// `float.square_root` cannot fail.
 fn sqrt_nonneg(value: Float) -> Float {
-  use <- bool.guard(when: value <=. 0.0, return: 0.0)
-  newton_sqrt(value: value, guess: value, iterations: 32)
-}
-
-fn newton_sqrt(
-  value value: Float,
-  guess guess: Float,
-  iterations iterations: Int,
-) -> Float {
-  use <- bool.guard(when: iterations <= 0 || guess == 0.0, return: guess)
-  newton_sqrt(
-    value: value,
-    guess: { guess +. value /. guess } /. 2.0,
-    iterations: iterations - 1,
-  )
-}
-
-// --- list helpers --------------------------------------------------------
-
-fn first_or_default(points: List(LatLng)) -> LatLng {
-  case points {
-    [] -> latlng.wrap(lat: 0.0, lng: 0.0)
-    [head, ..] -> head
-  }
-}
-
-fn last_or_default(points: List(LatLng), fallback: LatLng) -> LatLng {
-  case points {
-    [] -> fallback
-    [single] -> single
-    [_, ..tail] -> last_or_default(tail, fallback)
-  }
-}
-
-fn middle_of(points: List(LatLng)) -> List(LatLng) {
-  case points {
-    [] -> []
-    [_] -> []
-    [_, ..tail] -> drop_last(tail)
-  }
-}
-
-fn drop_last(points: List(LatLng)) -> List(LatLng) {
-  case points {
-    [] -> []
-    [_] -> []
-    [head, ..tail] -> [head, ..drop_last(tail)]
+  case float.square_root(float.max(value, 0.0)) {
+    Ok(root) -> root
+    Error(Nil) -> 0.0
   }
 }

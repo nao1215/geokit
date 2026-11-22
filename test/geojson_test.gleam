@@ -1,5 +1,6 @@
 import gleam/dynamic/decode
 import gleam/json
+import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import gleeunit/should
@@ -406,4 +407,89 @@ pub fn feature_collection_round_trip_test() -> Nil {
       properties: city_decoder(),
     )
   decoded |> should.equal(features)
+}
+
+// --- integer coordinates ------------------------------------------------
+
+pub fn decode_point_with_integer_coordinates_test() -> Nil {
+  let assert Ok(geometry.Point(point)) =
+    geojson.decode_geometry(
+      input: "{\"type\":\"Point\",\"coordinates\":[139,35,12]}",
+    )
+  #(latlng.lat(point), latlng.lng(point))
+  |> should.equal(#(35.0, 139.0))
+}
+
+pub fn decode_mixed_integer_and_float_coordinates_test() -> Nil {
+  let assert Ok(geometry.LineString(points)) =
+    geojson.decode_geometry(
+      input: "{\"type\":\"LineString\",\"coordinates\":[[0,0],[1.5,2]]}",
+    )
+  points
+  |> should.equal([
+    latlng.new_or_panic(lat: 0.0, lng: 0.0),
+    latlng.new_or_panic(lat: 2.0, lng: 1.5),
+  ])
+}
+
+pub fn decode_polygons_with_integer_coordinates_test() -> Nil {
+  let ring = "[[0,0],[10,0],[10,10],[0,0]]"
+  let expected = [
+    latlng.new_or_panic(lat: 0.0, lng: 0.0),
+    latlng.new_or_panic(lat: 0.0, lng: 10.0),
+    latlng.new_or_panic(lat: 10.0, lng: 10.0),
+    latlng.new_or_panic(lat: 0.0, lng: 0.0),
+  ]
+  geojson.decode_geometry(
+    input: "{\"type\":\"Polygon\",\"coordinates\":[" <> ring <> "]}",
+  )
+  |> should.equal(Ok(geometry.Polygon([expected])))
+  geojson.decode_geometry(
+    input: "{\"type\":\"MultiPolygon\",\"coordinates\":[[" <> ring <> "]]}",
+  )
+  |> should.equal(Ok(geometry.MultiPolygon([[expected]])))
+  geojson.decode_geometry(
+    input: "{\"type\":\"MultiPoint\",\"coordinates\":[[1,2],[3,4]]}",
+  )
+  |> should.equal(
+    Ok(
+      geometry.MultiPoint([
+        latlng.new_or_panic(lat: 2.0, lng: 1.0),
+        latlng.new_or_panic(lat: 4.0, lng: 3.0),
+      ]),
+    ),
+  )
+}
+
+// --- signed zero --------------------------------------------------------
+
+pub fn decode_polygon_closed_with_signed_zero_test() -> Nil {
+  // The ring starts at 0.0 and ends at -0.0: the same position.
+  let input =
+    "{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[-0.0,-0.0]]]}"
+  let assert Ok(geometry.Polygon([ring])) =
+    geojson.decode_geometry(input: input)
+  list.length(ring)
+  |> should.equal(4)
+}
+
+// --- huge integers --------------------------------------------------------
+
+// The Erlang JSON parser keeps a huge integer as a bignum, which
+// `int.to_float` cannot convert; it must be a decode error, not a crash.
+@target(erlang)
+pub fn decode_huge_integer_coordinate_is_an_error_test() -> Nil {
+  let huge = "1" <> string.repeat("0", 400)
+  let input = "{\"type\":\"Point\",\"coordinates\":[" <> huge <> ",0]}"
+  case geojson.decode_geometry(input: input) {
+    Error(geojson.InvalidStructure(_)) -> Nil
+    _ -> should.be_true(False)
+  }
+}
+
+pub fn decode_integer_coordinates_test() -> Nil {
+  geojson.decode_geometry(
+    input: "{\"type\":\"Point\",\"coordinates\":[-180,90]}",
+  )
+  |> should.equal(Ok(geometry.Point(p(90.0, -180.0))))
 }

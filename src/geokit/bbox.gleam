@@ -13,7 +13,8 @@
 //// `terraformer`, etc.) are an explicit design choice and are out
 //// of scope for this module.
 
-import gleam/bool
+import gleam/float
+import gleam/list
 
 import geokit/geometry.{
   type Geometry, LineString, MultiPoint, MultiPolygon, Point, Polygon,
@@ -61,40 +62,21 @@ pub fn compute(
   case all_points(geometry) {
     [] -> Error(EmptyGeometry)
     [head, ..tail] -> {
+      let lat = latlng.lat(head)
+      let lng = latlng.lng(head)
       let #(min_lat, max_lat, min_lng, max_lng) =
-        extend_loop(
-          points: tail,
-          min_lat: latlng.lat(head),
-          max_lat: latlng.lat(head),
-          min_lng: latlng.lng(head),
-          max_lng: latlng.lng(head),
-        )
+        list.fold(tail, #(lat, lat, lng, lng), fn(box, p) {
+          let #(min_lat, max_lat, min_lng, max_lng) = box
+          #(
+            float.min(min_lat, latlng.lat(p)),
+            float.max(max_lat, latlng.lat(p)),
+            float.min(min_lng, latlng.lng(p)),
+            float.max(max_lng, latlng.lng(p)),
+          )
+        })
       let sw = latlng.wrap(lat: min_lat, lng: min_lng)
       let ne = latlng.wrap(lat: max_lat, lng: max_lng)
       Ok(#(sw, ne))
-    }
-  }
-}
-
-fn extend_loop(
-  points points: List(LatLng),
-  min_lat min_lat: Float,
-  max_lat max_lat: Float,
-  min_lng min_lng: Float,
-  max_lng max_lng: Float,
-) -> #(Float, Float, Float, Float) {
-  case points {
-    [] -> #(min_lat, max_lat, min_lng, max_lng)
-    [head, ..tail] -> {
-      let lat = latlng.lat(head)
-      let lng = latlng.lng(head)
-      extend_loop(
-        points: tail,
-        min_lat: min_float(a: min_lat, b: lat),
-        max_lat: max_float(a: max_lat, b: lat),
-        min_lng: min_float(a: min_lng, b: lng),
-        max_lng: max_float(a: max_lng, b: lng),
-      )
     }
   }
 }
@@ -104,38 +86,7 @@ fn all_points(geometry: Geometry) -> List(LatLng) {
     Point(p) -> [p]
     MultiPoint(ps) -> ps
     LineString(ps) -> ps
-    Polygon(rings) -> flatten_rings(rings)
-    MultiPolygon(polygons) -> flatten_polygons(polygons)
+    Polygon(rings) -> list.flatten(rings)
+    MultiPolygon(polygons) -> list.flat_map(polygons, list.flatten)
   }
-}
-
-fn flatten_rings(rings: List(List(LatLng))) -> List(LatLng) {
-  case rings {
-    [] -> []
-    [head, ..tail] -> append_list(head, flatten_rings(tail))
-  }
-}
-
-fn flatten_polygons(polygons: List(List(List(LatLng)))) -> List(LatLng) {
-  case polygons {
-    [] -> []
-    [head, ..tail] -> append_list(flatten_rings(head), flatten_polygons(tail))
-  }
-}
-
-fn append_list(left: List(a), right: List(a)) -> List(a) {
-  case left {
-    [] -> right
-    [head, ..tail] -> [head, ..append_list(tail, right)]
-  }
-}
-
-fn min_float(a a: Float, b b: Float) -> Float {
-  use <- bool.guard(when: a <. b, return: a)
-  b
-}
-
-fn max_float(a a: Float, b b: Float) -> Float {
-  use <- bool.guard(when: a >. b, return: a)
-  b
 }

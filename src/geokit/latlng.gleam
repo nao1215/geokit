@@ -37,15 +37,13 @@ pub type LatLngError {
 /// let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
 /// ```
 pub fn new(lat lat: Float, lng lng: Float) -> Result(LatLng, LatLngError) {
-  use <- bool.guard(
-    when: lat <. -90.0 || lat >. 90.0,
-    return: Error(LatOutOfRange(lat: lat)),
-  )
-  use <- bool.guard(
-    when: lng <. -180.0 || lng >. 180.0,
-    return: Error(LngOutOfRange(lng: lng)),
-  )
-  Ok(LatLng(lat: lat, lng: lng))
+  // Written as "inside the range" so that NaN, which fails every
+  // comparison, is rejected (JavaScript can produce it; Erlang cannot).
+  case lat >=. -90.0 && lat <=. 90.0, lng >=. -180.0 && lng <=. 180.0 {
+    True, True -> Ok(LatLng(lat: lat, lng: lng))
+    False, _ -> Error(LatOutOfRange(lat: lat))
+    True, False -> Error(LngOutOfRange(lng: lng))
+  }
 }
 
 /// Build a `LatLng` from literal coordinates, panicking on
@@ -101,9 +99,19 @@ pub fn new_or_panic(lat lat: Float, lng lng: Float) -> LatLng {
 /// // p has lat = 90.0, lng = -179.0
 /// ```
 pub fn wrap(lat lat: Float, lng lng: Float) -> LatLng {
-  let lat_clamped = float.clamp(lat, min: -90.0, max: 90.0)
-  let lng_wrapped = wrap_longitude(lng)
-  LatLng(lat: lat_clamped, lng: lng_wrapped)
+  LatLng(lat: clamp_latitude(lat), lng: wrap_longitude(lng))
+}
+
+// Non-finite input exists only on JavaScript (Erlang raises before a
+// float can become Infinity or NaN). The rule: an infinite latitude
+// clamps to the pole on its side, a NaN latitude becomes 0.0, and a
+// non-finite longitude (Infinity or NaN) becomes 0.0.
+fn clamp_latitude(lat: Float) -> Float {
+  use <- bool.guard(when: lat >. 90.0, return: 90.0)
+  use <- bool.guard(when: lat <. -90.0, return: -90.0)
+  use <- bool.guard(when: lat >=. -90.0, return: lat)
+  // NaN fails every comparison above.
+  0.0
 }
 
 fn wrap_longitude(lng: Float) -> Float {
@@ -118,7 +126,10 @@ fn wrap_longitude(lng: Float) -> Float {
   let result = wrapped -. 180.0
   use <- bool.guard(when: result >. 180.0, return: 180.0)
   use <- bool.guard(when: result <. -180.0, return: -180.0)
-  result
+  use <- bool.guard(when: result >=. -180.0, return: result)
+  // Only an infinite or NaN `lng` gets here: the reduction above turns
+  // it into NaN.
+  0.0
 }
 
 // --- Accessors -----------------------------------------------------------
@@ -138,5 +149,12 @@ pub fn lng(p p: LatLng) -> Float {
 /// Value equality. Two `LatLng` values are equal iff their `lat` and
 /// `lng` components compare equal.
 pub fn equal(a a: LatLng, b b: LatLng) -> Bool {
-  a.lat == b.lat && a.lng == b.lng
+  same_degrees(a.lat, b.lat) && same_degrees(a.lng, b.lng)
+}
+
+// Numeric comparison instead of `==`: on Erlang `==` on floats is exact
+// and tells -0.0 from 0.0, while JavaScript treats them as equal. `>=.`
+// and `<=.` compare numerically on both targets.
+fn same_degrees(a: Float, b: Float) -> Bool {
+  a >=. b && a <=. b
 }

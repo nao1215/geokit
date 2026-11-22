@@ -1,4 +1,6 @@
+import gleam/int
 import gleam/list
+import gleam/string
 import gleeunit/should
 
 import geokit/latlng
@@ -158,4 +160,117 @@ pub fn decode_with_rejects_too_large_precision_test() -> Nil {
     Error(polyline.PrecisionOutOfRange(precision: 12)) -> Nil
     _ -> should.be_true(False)
   }
+}
+
+// --- character range and chunk limits -----------------------------------
+
+pub fn decode_rejects_del_test() -> Nil {
+  // Valid polyline characters are 63..126; DEL (127) is outside.
+  polyline.decode(input: "??\u{7F}?")
+  |> should.equal(Error(polyline.InvalidCharacter(char: "\u{7F}", position: 2)))
+}
+
+pub fn decode_rejects_non_ascii_test() -> Nil {
+  polyline.decode(input: "??é?")
+  |> should.equal(Error(polyline.InvalidCharacter(char: "é", position: 2)))
+}
+
+pub fn decode_rejects_chunk_beyond_ten_test() -> Nil {
+  // Ten chunks cover the largest value precision 11 produces (shifts
+  // 0..45); an eleventh continuation chunk is outside the format.
+  polyline.decode(input: "__________?")
+  |> should.equal(Error(polyline.InvalidCharacter(char: "?", position: 10)))
+  polyline.decode(input: string.repeat("_", 40) <> "??")
+  |> should.equal(Error(polyline.InvalidCharacter(char: "_", position: 10)))
+}
+
+pub fn decode_accepts_ten_chunks_test() -> Nil {
+  // Nine continuation chunks and a stop chunk: the largest legal width.
+  let assert Ok(_) = polyline.decode(input: "_________??")
+  Nil
+}
+
+pub fn decode_reports_grapheme_with_combining_mark_test() -> Nil {
+  // "?" followed by a combining acute accent is one grapheme; the
+  // invalid byte belongs to it, so it is reported at grapheme 0.
+  polyline.decode(input: "?\u{0301}")
+  |> should.equal(
+    Error(polyline.InvalidCharacter(char: "?\u{0301}", position: 0)),
+  )
+  polyline.decode(input: "??e\u{0301}?")
+  |> should.equal(
+    Error(polyline.InvalidCharacter(char: "e\u{0301}", position: 2)),
+  )
+}
+
+pub fn decode_reports_grapheme_index_after_cap_test() -> Nil {
+  // The chunk that exceeds the width cap carries a combining mark.
+  polyline.decode(input: "__________?\u{0301}")
+  |> should.equal(
+    Error(polyline.InvalidCharacter(char: "?\u{0301}", position: 10)),
+  )
+}
+
+// --- extreme coordinates at high precision -------------------------------
+
+fn round_trip_extremes(precision: Int) -> Nil {
+  let points = [
+    latlng.new_or_panic(lat: 0.0, lng: 180.0),
+    latlng.new_or_panic(lat: 0.0, lng: -180.0),
+    latlng.new_or_panic(lat: 90.0, lng: 180.0),
+    latlng.new_or_panic(lat: -90.0, lng: -180.0),
+    latlng.new_or_panic(lat: 90.0, lng: 0.0),
+    latlng.new_or_panic(lat: -90.0, lng: 0.0),
+  ]
+  let assert Ok(encoded) =
+    polyline.encode_with(points: points, precision: precision)
+  let assert Ok(decoded) =
+    polyline.decode_with(input: encoded, precision: precision)
+  list.length(decoded)
+  |> should.equal(list.length(points))
+  list.zip(points, decoded)
+  |> list.each(fn(pair) {
+    let #(expected, actual) = pair
+    approx_equal(latlng.lat(actual), latlng.lat(expected), 1.0e-9)
+    |> should.be_true
+    approx_equal(latlng.lng(actual), latlng.lng(expected), 1.0e-9)
+    |> should.be_true
+  })
+}
+
+pub fn round_trip_extremes_precision_8_test() -> Nil {
+  round_trip_extremes(8)
+}
+
+pub fn round_trip_extremes_precision_11_test() -> Nil {
+  round_trip_extremes(11)
+}
+
+pub fn round_trip_single_antimeridian_point_precision_8_test() -> Nil {
+  let points = [latlng.new_or_panic(lat: 0.0, lng: 180.0)]
+  let assert Ok(encoded) = polyline.encode_with(points: points, precision: 8)
+  polyline.decode_with(input: encoded, precision: 8)
+  |> should.equal(Ok(points))
+}
+
+// --- long inputs --------------------------------------------------------
+
+pub fn decode_long_polyline_test() -> Nil {
+  // 100_000 points must decode without exhausting the stack on either
+  // target.
+  let points =
+    list.repeat(Nil, times: 100_000)
+    |> list.index_map(fn(_, i) {
+      latlng.wrap(
+        lat: int.to_float(i % 1000) /. 100.0,
+        lng: int.to_float(i % 777) /. 100.0,
+      )
+    })
+  let encoded = polyline.encode(points: points)
+  let assert Ok(decoded) = polyline.decode(input: encoded)
+  list.length(decoded)
+  |> should.equal(100_000)
+  list.zip(points, decoded)
+  |> list.all(fn(pair) { latlng.equal(pair.0, pair.1) })
+  |> should.be_true
 }
