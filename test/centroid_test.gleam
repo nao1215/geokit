@@ -313,10 +313,36 @@ pub fn centroid_of_multipolygon_with_hole_test() -> Nil {
 
 pub fn centroid_of_zero_area_multipolygon_falls_back_to_vertex_mean_test() -> Nil {
   // Two degenerate polygons: each falls back to the mean of its
-  // exterior vertices, and the result is the mean of those.
+  // exterior vertices without the closing duplicate, and the result is
+  // the mean of those.
   let line_a = ring([#(0.0, 0.0), #(2.0, 0.0), #(0.0, 0.0)])
   let line_b = ring([#(10.0, 10.0), #(10.0, 12.0), #(10.0, 10.0)])
   let assert Ok(c) =
     centroid.compute(geometry: geometry.MultiPolygon([[line_a], [line_b]]))
-  close_to(c, { 2.0 /. 3.0 +. 10.0 } /. 2.0, { 0.0 +. 32.0 /. 3.0 } /. 2.0)
+  close_to(c, { 1.0 +. 10.0 } /. 2.0, { 0.0 +. 11.0 } /. 2.0)
+}
+
+pub fn centroid_of_zero_area_polygon_ignores_closing_vertex_test() -> Nil {
+  // A closed ring on a line has zero area; the fallback must average
+  // the distinct vertices, as `of_points` does on the open ring.
+  let points = ring([#(0.0, 0.0), #(1.0, 0.0), #(2.0, 0.0)])
+  let assert Ok(c) =
+    centroid.compute(
+      geometry: geometry.Polygon([
+        ring([#(0.0, 0.0), #(1.0, 0.0), #(2.0, 0.0), #(0.0, 0.0)]),
+      ]),
+    )
+  close_to(c, 1.0, 0.0)
+  centroid.of_points(points: points)
+  |> should.equal(Ok(c))
+}
+
+pub fn centroid_of_zero_area_unclosed_polygon_keeps_every_vertex_test() -> Nil {
+  let assert Ok(c) =
+    centroid.compute(
+      geometry: geometry.Polygon([
+        ring([#(0.0, 0.0), #(1.0, 0.0), #(5.0, 0.0)]),
+      ]),
+    )
+  close_to(c, 2.0, 0.0)
 }

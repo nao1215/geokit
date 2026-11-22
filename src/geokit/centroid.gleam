@@ -122,8 +122,22 @@ fn polygon_centroid(
 ) -> Result(LatLng, CentroidError) {
   use exterior <- result.try(exterior_ring(rings: rings))
   from_moments(moments: polygon_moments(rings: rings), fallback: fn() {
-    mean_of_points(points: exterior)
+    mean_of_points(points: open_ring(exterior))
   })
+}
+
+// A closed ring repeats its first vertex at the end; drop the repeat so
+// the zero-area fallback weighs every distinct vertex once, matching
+// `of_points` on the open ring.
+fn open_ring(ring: List(LatLng)) -> List(LatLng) {
+  case ring, list.last(ring) {
+    [first, _, ..], Ok(last) ->
+      case latlng.equal(first, last) {
+        True -> list.take(ring, list.length(ring) - 1)
+        False -> ring
+      }
+    _, _ -> ring
+  }
 }
 
 fn multipolygon_centroid(
