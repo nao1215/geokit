@@ -18,7 +18,8 @@ The public API shrinks from 13 modules to 5: `geokit`, `geokit/geohash`, `geokit
 - `geojson` returns `gleam/json` values and decoders: `geometry_to_json`, `feature_to_json`, `feature_collection_to_json`, `geometry_decoder`, `feature_decoder` and `feature_collection_decoder`. `GeoJsonError` and the `encode_*` and `decode_*` functions are removed. `Feature.geometry` is now `Option(Geometry)`, and `FeatureId` gains `FloatId`.
 - `polyline.encode` and `decode` take `precision:`, and `encode_with` and `decode_with` are removed. `decode` returns `CoordinateOutOfRange(index:)` for out-of-range coordinates instead of clamping them.
 - `geohash.neighbor` and `neighbors` return `NoNeighborBeyondPole` past a pole instead of `EmptyHash`. The direction label is `toward:`.
-- Removed: `geokit.version`, `latlng.new_or_panic`, `latlng.equal` (use `==`), `bbox.of_points`, `centroid.of_points` (use `MultiPoint`), `distance.haversine_km`, `simplify.line_string` (use `LineString`) and `point_in_polygon.contains` (use `locate`).
+- Removed: `geokit.version`, `latlng.new_or_panic`, `latlng.equal` (use `==`), `bbox.of_points`, `centroid.of_points` (use `MultiPoint` with the closing vertex left out, or `Polygon` for the area centroid), `distance.haversine_km`, `simplify.line_string` (use `LineString`) and `point_in_polygon.contains` (use `locate`).
+- Renamed variants and fields: `LatOutOfRange(lat:)` and `LngOutOfRange(lng:)` become `LatitudeOutOfRange(latitude:)` and `LongitudeOutOfRange(longitude:)`, `InvalidCharacter(char:)` in geohash and polyline becomes `InvalidCharacter(character:)`, `InvalidQuadkeyChar(char:)` becomes `InvalidQuadkeyCharacter(character:)`, and `FeatureId` variants drop the `value:` label.
 - Labels on a function's first argument are removed, so `geohash.decode(hash: h)` becomes `geohash.decode(h)`.
 - `Geometry` gains `MultiLineString`.
 - The minimum `gleam_stdlib` is 0.51.0, the version `gleam_json` 3 needs.

@@ -75,7 +75,7 @@ The API reference is on [HexDocs](https://hexdocs.pm/geokit/).
 
 - Distance and bearing use a sphere with the mean Earth radius (6,371,008.8 m). The error against an ellipsoidal distance stays under 0.5 %.
 - Bounding box, centroid, simplification and point-in-polygon treat longitude and latitude as a flat plane. Errors grow on shapes wider than a few degrees.
-- Nothing wraps around the antimeridian. Split a shape that crosses it into a `MultiPolygon`, as RFC 7946 §3.1.9 recommends.
+- The planar operations do not wrap around the antimeridian. Split a shape that crosses it into a `MultiPolygon`, as RFC 7946 §3.1.9 recommends.
 
 How the package is tested is described in [doc/testing.md](https://github.com/nao1215/geokit/blob/main/doc/testing.md).
 
