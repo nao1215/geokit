@@ -406,63 +406,61 @@ pub fn diff_polyline_encode_google_reference_test() -> Nil {
   let assert Ok(p1) = geokit.lat_lng(latitude: 38.5, longitude: -120.2)
   let assert Ok(p2) = geokit.lat_lng(latitude: 40.7, longitude: -120.95)
   let assert Ok(p3) = geokit.lat_lng(latitude: 43.252, longitude: -126.453)
-  polyline.encode(points: [p1, p2, p3])
+  encode5([p1, p2, p3])
   |> should.equal("_p~iF~ps|U_ulLnnqC_mqNvxq`@")
 }
 
 pub fn diff_polyline_encode_single_origin_test() -> Nil {
   // polyline.encode([[0, 0]], 5) = "??"
   let assert Ok(p) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
-  polyline.encode(points: [p])
+  encode5([p])
   |> should.equal("??")
 }
 
 pub fn diff_polyline_encode_empty_test() -> Nil {
-  polyline.encode(points: [])
+  encode5([])
   |> should.equal("")
 }
 
 pub fn diff_polyline_encode_tokyo_osaka_test() -> Nil {
-  // mapbox: polyline.encode(
-  //   [[35.6812, 139.7671], [34.6937, 135.5023]], 5) = "o~wxEkgatYzz_E~}_Y"
+  // mapbox: polyline.encode(//   [[35.6812, 139.7671], [34.6937, 135.5023]], 5) = "o~wxEkgatYzz_E~}_Y"
   let assert Ok(p1) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(p2) = geokit.lat_lng(latitude: 34.6937, longitude: 135.5023)
-  polyline.encode(points: [p1, p2])
+  encode5([p1, p2])
   |> should.equal("o~wxEkgatYzz_E~}_Y")
 }
 
 pub fn diff_polyline_encode_across_antimeridian_test() -> Nil {
-  // mapbox: polyline.encode(
-  //   [[0, 179.99], [0, -179.99]], 5) = "?ohqia@?~qctcA"
+  // mapbox: polyline.encode(//   [[0, 179.99], [0, -179.99]], 5) = "?ohqia@?~qctcA"
   let assert Ok(p1) = geokit.lat_lng(latitude: 0.0, longitude: 179.99)
   let assert Ok(p2) = geokit.lat_lng(latitude: 0.0, longitude: -179.99)
-  polyline.encode(points: [p1, p2])
+  encode5([p1, p2])
   |> should.equal("?ohqia@?~qctcA")
 }
 
 pub fn diff_polyline_encode_precision_6_test() -> Nil {
-  // mapbox: polyline.encode(
-  //   [[35.681234, 139.767123], [34.693712, 135.502345]], 6)
+  // mapbox: polyline.encode(//   [[35.681234, 139.767123], [34.693712, 135.502345]], 6)
   //   = "c|x`cAetuqiGbwg{@rshcG"
   let assert Ok(p1) =
     geokit.lat_lng(latitude: 35.681_234, longitude: 139.767_123)
   let assert Ok(p2) =
     geokit.lat_lng(latitude: 34.693_712, longitude: 135.502_345)
-  let assert Ok(encoded) = polyline.encode_with(points: [p1, p2], precision: 6)
+  let assert Ok(encoded) = polyline.encode([p1, p2], precision: 6)
   encoded |> should.equal("c|x`cAetuqiGbwg{@rshcG")
 }
 
 pub fn diff_polyline_encode_single_non_origin_test() -> Nil {
   // mapbox: polyline.encode([[10, 20]], 5) = "_c`|@_gayB"
   let assert Ok(p) = geokit.lat_lng(latitude: 10.0, longitude: 20.0)
-  polyline.encode(points: [p])
+  encode5([p])
   |> should.equal("_c`|@_gayB")
 }
 
 // --- Polyline decode vs @mapbox/polyline -------------------------------
 
 pub fn diff_polyline_decode_google_reference_test() -> Nil {
-  let assert Ok(points) = polyline.decode(input: "_p~iF~ps|U_ulLnnqC_mqNvxq`@")
+  let assert Ok(points) =
+    polyline.decode("_p~iF~ps|U_ulLnnqC_mqNvxq`@", precision: 5)
   let assert [p1, p2, p3] = points
   approx(geokit.latitude(p1), 38.5, 0.000_01) |> should.be_true
   approx(geokit.longitude(p1), -120.2, 0.000_01) |> should.be_true
@@ -474,7 +472,7 @@ pub fn diff_polyline_decode_google_reference_test() -> Nil {
 
 pub fn diff_polyline_decode_single_non_origin_test() -> Nil {
   // mapbox: polyline.encode([[35.6812, 139.7671]], 5) = "o~wxEkgatY"
-  let assert Ok(points) = polyline.decode(input: "o~wxEkgatY")
+  let assert Ok(points) = polyline.decode("o~wxEkgatY", precision: 5)
   let assert [p] = points
   approx(geokit.latitude(p), 35.6812, 0.000_01) |> should.be_true
   approx(geokit.longitude(p), 139.7671, 0.000_01) |> should.be_true
@@ -483,16 +481,16 @@ pub fn diff_polyline_decode_single_non_origin_test() -> Nil {
 pub fn diff_polyline_decode_rejects_below_63_test() -> Nil {
   // Spec only accepts code 63 ('?')..126 ('~'). Space (code 32) is
   // below 63 → reject.
-  case polyline.decode(input: " ") {
-    Error(polyline.InvalidCharacter(char: " ", position: 0)) -> Nil
+  case polyline.decode(" ", precision: 5) {
+    Error(polyline.InvalidCharacter(character: " ", position: 0)) -> Nil
     _ -> should.be_true(False)
   }
 }
 
 pub fn diff_polyline_round_trip_10_points_test() -> Nil {
   let points = build_curve(0, 10, [])
-  let encoded = polyline.encode(points: points)
-  let assert Ok(decoded) = polyline.decode(input: encoded)
+  let encoded = encode5(points)
+  let assert Ok(decoded) = polyline.decode(encoded, precision: 5)
   list.length(decoded)
   |> should.equal(10)
 }
@@ -797,4 +795,9 @@ fn geohash_bounds(
 ) -> Result(#(LatLng, LatLng), geohash.GeohashError) {
   geohash.decode_bounds(hash)
   |> result.map(fn(cell) { #(cell.south_west, cell.north_east) })
+}
+
+fn encode5(points: List(LatLng)) -> String {
+  let assert Ok(encoded) = polyline.encode(points, precision: 5)
+  encoded
 }

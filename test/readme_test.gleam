@@ -95,8 +95,8 @@ pub fn route() -> #(String, Int) {
   let assert Ok(p1) = geokit.lat_lng(latitude: 38.5, longitude: -120.2)
   let assert Ok(p2) = geokit.lat_lng(latitude: 40.7, longitude: -120.95)
   let assert Ok(p3) = geokit.lat_lng(latitude: 43.252, longitude: -126.453)
-  let encoded = polyline.encode(points: [p1, p2, p3])
-  let assert Ok(decoded) = polyline.decode(input: encoded)
+  let encoded = encode5([p1, p2, p3])
+  let assert Ok(decoded) = polyline.decode(encoded, precision: 5)
   #(encoded, list.length(decoded))
 }
 
@@ -296,4 +296,9 @@ fn simplify_line(
     Ok(geokit.LineString(simplified)) -> Ok(simplified)
     _ -> Error(Nil)
   }
+}
+
+fn encode5(points: List(LatLng)) -> String {
+  let assert Ok(encoded) = polyline.encode(points, precision: 5)
+  encoded
 }

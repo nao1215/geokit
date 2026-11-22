@@ -379,10 +379,10 @@ fn polyline_round_trips(
   precision: Int,
   tol: Float,
 ) -> Bool {
-  case polyline.encode_with(points: points, precision: precision) {
+  case polyline.encode(points, precision: precision) {
     Error(_) -> False
     Ok(encoded) ->
-      case polyline.decode_with(input: encoded, precision: precision) {
+      case polyline.decode(encoded, precision: precision) {
         Error(_) -> False
         Ok(decoded) -> lists_close_enough(points, decoded, tol)
       }
@@ -396,8 +396,8 @@ pub fn pbt_polyline_decode_round_trip_length_test() -> Nil {
 }
 
 fn polyline_round_trip_keeps_length(points: List(LatLng)) -> Bool {
-  let encoded = polyline.encode(points: points)
-  case polyline.decode(input: encoded) {
+  let encoded = encode5(points)
+  case polyline.decode(encoded, precision: 5) {
     Error(_) -> False
     Ok(decoded) -> list.length(decoded) == list.length(points)
   }
@@ -407,8 +407,8 @@ pub fn pbt_polyline_encode_default_matches_precision_5_test() -> Nil {
   metamon.forall(
     generator.list_of(latlng_gen(), range.constant(0, 6)),
     fn(points) {
-      case polyline.encode_with(points: points, precision: 5) {
-        Ok(encoded) -> polyline.encode(points: points) == encoded
+      case polyline.encode(points, precision: 5) {
+        Ok(encoded) -> encode5(points) == encoded
         Error(_) -> False
       }
     },
@@ -682,4 +682,9 @@ fn geohash_bounds(
 ) -> Result(#(LatLng, LatLng), geohash.GeohashError) {
   geohash.decode_bounds(hash)
   |> result.map(fn(cell) { #(cell.south_west, cell.north_east) })
+}
+
+fn encode5(points: List(LatLng)) -> String {
+  let assert Ok(encoded) = polyline.encode(points, precision: 5)
+  encoded
 }

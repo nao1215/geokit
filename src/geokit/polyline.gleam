@@ -1,12 +1,9 @@
-//// Google Encoded Polyline algorithm.
-////
-//// Encodes a sequence of `LatLng` points as a compact ASCII string
-//// using delta encoding, ZigZag transform, base-32 chunking, and a
-//// `+ 0x3F` ASCII offset. Used by the Google Maps Directions API,
-//// OSRM, Mapbox Directions, and Valhalla.
-////
-//// Specification:
-//// <https://developers.google.com/maps/documentation/utilities/polylinealgorithmformat>.
+//// Encoded polylines: a list of positions as a short ASCII string, as
+//// described in Google's Encoded Polyline Algorithm Format. Each
+//// coordinate is rounded to `precision` decimal digits and stored as the
+//// difference from the previous position. Google uses precision 5; some
+//// routing services use 6. The same precision must be used to encode and
+//// decode.
 
 import gleam/bit_array
 import gleam/bool
@@ -18,54 +15,46 @@ import gleam/string
 
 import geokit.{type LatLng}
 
-/// Errors returned by [`encode_with`](#encode_with), [`decode`](#decode),
-/// and [`decode_with`](#decode_with).
+/// The reason a polyline operation failed.
 pub type PolylineError {
-  /// The input string was malformed — typically a continuation byte
-  /// without a corresponding stop byte (high bit set on the last
-  /// chunk).
+  /// The input ended in the middle of a value.
   TruncatedInput
-  /// A character outside the printable ASCII range used by the
-  /// encoding appeared in the input, or a value ran past ten chunks.
-  /// `position` is the grapheme index in the input and `char` is that
-  /// grapheme.
-  InvalidCharacter(char: String, position: Int)
-  /// `precision` was outside the supported range `[1, 11]`. The
-  /// Google reference encoding uses 5; Valhalla and OSRM use 6.
-  /// Precisions above 11 overflow the safe integer range on the
-  /// JavaScript target.
+  /// A character outside `?` to `~` (ASCII 63 to 126), or a value longer
+  /// than ten chunks. `character` is the grapheme that holds the bad byte
+  /// and `position` is its 0-based grapheme index.
+  InvalidCharacter(character: String, position: Int)
+  /// The precision was outside [1, 11].
   PrecisionOutOfRange(precision: Int)
+  /// The decoded position at this 0-based index is outside the latitude
+  /// or longitude range.
+  CoordinateOutOfRange(index: Int)
 }
 
 // --- Encode --------------------------------------------------------------
 
-/// Encode a list of points using the default precision of 5 (1e-5
-/// degrees, ~1 m at the equator). This matches Google's original
-/// algorithm.
+/// Returns the encoded polyline for `points`, with each coordinate rounded
+/// to `precision` decimal digits. `precision` must be in [1, 11]; above
+/// 11 the values no longer fit in the integers JavaScript represents
+/// exactly.
+///
+/// ## Examples
 ///
 /// ```gleam
-/// import geokit/polyline
-/// import geokit/latlng
-///
-/// let assert Ok(p1) = geokit.lat_lng(latitude: 38.5, longitude: -120.2)
-/// let assert Ok(p2) = geokit.lat_lng(latitude: 40.7, longitude: -120.95)
-/// let assert Ok(p3) = geokit.lat_lng(latitude: 43.252, longitude: -126.453)
-/// polyline.encode([p1, p2, p3])
-/// // == "_p~iF~ps|U_ulLnnqC_mqNvxq`@"
+/// [
+///   geokit.wrap_lat_lng(latitude: 38.5, longitude: -120.2),
+///   geokit.wrap_lat_lng(latitude: 40.7, longitude: -120.95),
+///   geokit.wrap_lat_lng(latitude: 43.252, longitude: -126.453),
+/// ]
+/// |> encode(precision: 5)
+/// // -> Ok("_p~iF~ps|U_ulLnnqC_mqNvxq`@")
 /// ```
-pub fn encode(points points: List(LatLng)) -> String {
-  // Precision 5 is statically valid, so we bypass the precision
-  // check that `encode_with` enforces at runtime and call the
-  // internal encoder directly.
-  encode_unchecked(points: points, precision: 5)
-}
-
-/// Encode a list of points with the given precision (number of
-/// decimal digits to preserve). `precision` must be in `[1, 11]`;
-/// precision 6 is used by Valhalla and the Open Source Routing
-/// Machine for higher accuracy than the Google default of 5.
-pub fn encode_with(
-  points points: List(LatLng),
+///
+/// ```gleam
+/// encode([], precision: 12)
+/// // -> Error(PrecisionOutOfRange(precision: 12))
+/// ```
+pub fn encode(
+  points: List(LatLng),
   precision precision: Int,
 ) -> Result(String, PolylineError) {
   use <- bool.guard(
@@ -169,23 +158,24 @@ fn bit_not_lower(value: Int) -> Int {
 
 // --- Decode --------------------------------------------------------------
 
-/// Decode a polyline string with the default precision (5).
+/// Returns the positions in an encoded polyline. `precision` must be the
+/// one used to encode it, in [1, 11]. Returns an error for a malformed
+/// string or a position outside the latitude or longitude range.
+///
+/// ## Examples
 ///
 /// ```gleam
-/// import geokit/polyline
-///
-/// let assert Ok(points) = polyline.decode("_p~iF~ps|U_ulLnnqC_mqNvxq`@")
-/// // points == [(38.5, -120.2), (40.7, -120.95), (43.252, -126.453)]
+/// decode("_p~iF~ps|U_ulLnnqC_mqNvxq`@", precision: 5)
+/// |> result.map(list.map(_, geokit.latitude))
+/// // -> Ok([38.5, 40.7, 43.252])
 /// ```
-pub fn decode(input input: String) -> Result(List(LatLng), PolylineError) {
-  decode_with(input: input, precision: 5)
-}
-
-/// Decode a polyline string with the given precision. Must match the
-/// precision used at encode time. `precision` must be in `[1, 11]`,
-/// matching [`encode_with`](#encode_with).
-pub fn decode_with(
-  input input: String,
+///
+/// ```gleam
+/// decode("_p~iF", precision: 5)
+/// // -> Error(TruncatedInput)
+/// ```
+pub fn decode(
+  input: String,
   precision precision: Int,
 ) -> Result(List(LatLng), PolylineError) {
   use <- bool.guard(
@@ -203,15 +193,16 @@ pub fn decode_with(
       acc: [],
     ),
   )
-  Ok(
-    list.reverse(raw_points)
-    |> list.map(fn(scaled) {
-      let #(lat_int, lng_int) = scaled
-      let lat = int.to_float(lat_int) /. factor
-      let lng = int.to_float(lng_int) /. factor
-      geokit.wrap_lat_lng(latitude: lat, longitude: lng)
-    }),
-  )
+  list.reverse(raw_points)
+  |> list.index_map(fn(scaled, index) {
+    let #(lat_int, lng_int) = scaled
+    geokit.lat_lng(
+      latitude: int.to_float(lat_int) /. factor,
+      longitude: int.to_float(lng_int) /. factor,
+    )
+    |> result.replace_error(CoordinateOutOfRange(index:))
+  })
+  |> result.all
 }
 
 // The input is walked byte by byte, so `position` is a byte offset.
@@ -283,7 +274,7 @@ fn decode_signed(
   Ok(#(signed, rest, after_pos))
 }
 
-// Each chunk carries 5 bits. The largest value `encode_with` produces
+// Each chunk carries 5 bits. The largest value `encode` produces
 // is the ZigZag of 180e11 at precision 11, about 46 bits, which needs
 // ten chunks (shifts 0 to 45). A longer run of continuation chunks is
 // rejected at the chunk that would start beyond bit 50, so every
@@ -345,11 +336,11 @@ fn locate_grapheme(
   index index: Int,
 ) -> PolylineError {
   case graphemes {
-    [] -> InvalidCharacter(char: "", position: index)
+    [] -> InvalidCharacter(character: "", position: index)
     [grapheme, ..rest] -> {
       let end = start + string.byte_size(grapheme)
       case byte_offset < end {
-        True -> InvalidCharacter(char: grapheme, position: index)
+        True -> InvalidCharacter(character: grapheme, position: index)
         False ->
           locate_grapheme(
             graphemes: rest,
