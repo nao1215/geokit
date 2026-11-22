@@ -316,7 +316,7 @@ pub fn diff_geohash_decode_bounds_tokyo_p9_test() -> Nil {
   |> should.be_true
 }
 
-// --- Geohash neighbours vs ngeohash -------------------------------------
+// --- Geohash neighbors vs ngeohash -------------------------------------
 
 pub fn diff_geohash_neighbors_tokyo_p5_test() -> Nil {
   // ngeohash.neighbors("xn76u") [N, NE, E, SE, S, SW, W, NW]
@@ -338,7 +338,7 @@ pub fn diff_geohash_neighbors_origin_p5_test() -> Nil {
   ns.north |> should.equal("ebpbp")
 }
 
-// --- Polar neighbour convention (documented divergence from ngeohash) --
+// --- Polar neighbor convention (documented divergence from ngeohash) --
 
 pub fn diff_geohash_north_of_north_pole_has_no_neighbor_test() -> Nil {
   // geokit returns `Error(NoNeighborBeyondPole)` when a polar neighbor
@@ -392,10 +392,10 @@ pub fn diff_geohash_max_precision_round_trip_test() -> Nil {
   // Precision 12 is the geokit-supported maximum.
   let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(hash) = geohash.encode(tokyo, precision: 12)
-  let assert Ok(centre) = geohash.decode(hash)
-  approx(geokit.latitude(centre), 35.6812, 0.000_001)
+  let assert Ok(center) = geohash.decode(hash)
+  approx(geokit.latitude(center), 35.6812, 0.000_001)
   |> should.be_true
-  approx(geokit.longitude(centre), 139.7671, 0.000_001)
+  approx(geokit.longitude(center), 139.7671, 0.000_001)
   |> should.be_true
 }
 

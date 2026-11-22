@@ -51,7 +51,7 @@ fn latlng_gen() -> generator.Generator(LatLng) {
 
 fn mid_latlng_gen() -> generator.Generator(LatLng) {
   // Latitudes well away from poles to avoid documented polar edge
-  // cases in geohash neighbour traversal and mercator pole clamps.
+  // cases in geohash neighbor traversal and mercator pole clamps.
   generator.map2(
     generator.float(-80.0, 80.0),
     generator.float(-179.0, 179.0),
@@ -136,7 +136,7 @@ pub fn pbt_haversine_bounded_by_half_circumference_test() -> Nil {
   })
 }
 
-pub fn pbt_haversine_km_is_metres_over_1000_test() -> Nil {
+pub fn pbt_distance_in_kilometers_is_meters_over_1000_test() -> Nil {
   metamon.forall(generator.tuple2(latlng_gen(), latlng_gen()), fn(pair) {
     let m = geokit.distance(from: pair.0, to: pair.1)
     let km = {

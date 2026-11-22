@@ -71,11 +71,11 @@ pub fn encode_precision_too_high_test() -> Nil {
 // --- decode --------------------------------------------------------------
 
 pub fn decode_wikipedia_test() -> Nil {
-  let assert Ok(centre) = geohash.decode("ezs42")
-  // The cell centre is at (42.6, -5.6) ± half-cell.
-  approx_equal(geokit.latitude(centre), 42.6, 0.05)
+  let assert Ok(center) = geohash.decode("ezs42")
+  // The cell center is at (42.6, -5.6) ± half-cell.
+  approx_equal(geokit.latitude(center), 42.6, 0.05)
   |> should.be_true
-  approx_equal(geokit.longitude(centre), -5.6, 0.05)
+  approx_equal(geokit.longitude(center), -5.6, 0.05)
   |> should.be_true
 }
 
@@ -128,10 +128,10 @@ pub fn neighbors_accepts_upper_case_test() -> Nil {
 pub fn round_trip_tokyo_test() -> Nil {
   let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(hash) = geohash.encode(tokyo, precision: 9)
-  let assert Ok(centre) = geohash.decode(hash)
-  approx_equal(geokit.latitude(centre), 35.6812, 0.0001)
+  let assert Ok(center) = geohash.decode(hash)
+  approx_equal(geokit.latitude(center), 35.6812, 0.0001)
   |> should.be_true
-  approx_equal(geokit.longitude(centre), 139.7671, 0.0001)
+  approx_equal(geokit.longitude(center), 139.7671, 0.0001)
   |> should.be_true
 }
 
@@ -148,7 +148,7 @@ pub fn decode_bounds_contains_original_test() -> Nil {
   |> should.be_true
 }
 
-// --- neighbours ----------------------------------------------------------
+// --- neighbors ----------------------------------------------------------
 
 pub fn neighbor_east_then_west_round_trip_test() -> Nil {
   // east(west(h)) == h for any non-boundary hash.
@@ -170,8 +170,8 @@ pub fn neighbor_north_then_south_round_trip_test() -> Nil {
   |> should.equal(start)
 }
 
-pub fn neighbor_decode_north_is_north_of_centre_test() -> Nil {
-  // The northern neighbour's cell must lie north of the original
+pub fn neighbor_decode_north_is_north_of_center_test() -> Nil {
+  // The northern neighbor's cell must lie north of the original
   // cell: its SW latitude should equal the original's NE latitude.
   let assert Ok(point) = geokit.lat_lng(latitude: 35.0, longitude: 135.0)
   let assert Ok(start) = geohash.encode(point, precision: 6)
@@ -195,7 +195,7 @@ pub fn encode_at_35_135_matches_ngeohash_test() -> Nil {
 
 pub fn neighbors_around_test() -> Nil {
   let assert Ok(all) = geohash.neighbors("u4pruyd")
-  // Each neighbour has the same length as the input.
+  // Each neighbor has the same length as the input.
   string.length(all.north)
   |> should.equal(7)
   string.length(all.south)

@@ -236,14 +236,14 @@ pub fn equator_quarter_test() -> Nil {
   |> should.be_true
 }
 
-pub fn haversine_km_matches_metres_test() -> Nil {
+pub fn distance_in_kilometers_matches_meters_test() -> Nil {
   let assert Ok(a) = geokit.lat_lng(latitude: 35.0, longitude: 139.0)
   let assert Ok(b) = geokit.lat_lng(latitude: 36.0, longitude: 140.0)
-  let metres = geokit.distance(from: a, to: b)
+  let meters = geokit.distance(from: a, to: b)
   let km = {
     geokit.distance(from: a, to: b) /. 1000.0
   }
-  approx_equal(metres /. 1000.0, km, 0.000_001)
+  approx_equal(meters /. 1000.0, km, 0.000_001)
   |> should.be_true
 }
 
@@ -537,10 +537,10 @@ pub fn centroid_of_line_string_test() -> Nil {
   let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 2.0)
   let assert Ok(c) = geokit.lat_lng(latitude: 2.0, longitude: 0.0)
   let assert Ok(d) = geokit.lat_lng(latitude: 2.0, longitude: 2.0)
-  let assert Ok(centre) = geokit.centroid(geokit.LineString([a, b, c, d]))
-  geokit.latitude(centre)
+  let assert Ok(center) = geokit.centroid(geokit.LineString([a, b, c, d]))
+  geokit.latitude(center)
   |> should.equal(1.0)
-  geokit.longitude(centre)
+  geokit.longitude(center)
   |> should.equal(1.0)
 }
 
@@ -552,10 +552,10 @@ pub fn centroid_of_unit_square_test() -> Nil {
   let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 1.0)
   let assert Ok(c) = geokit.lat_lng(latitude: 1.0, longitude: 1.0)
   let assert Ok(d) = geokit.lat_lng(latitude: 1.0, longitude: 0.0)
-  let assert Ok(centre) = geokit.centroid(geokit.Polygon([[a, b, c, d, a]]))
-  approx_equal(geokit.latitude(centre), 0.5, 0.0001)
+  let assert Ok(center) = geokit.centroid(geokit.Polygon([[a, b, c, d, a]]))
+  approx_equal(geokit.latitude(center), 0.5, 0.0001)
   |> should.be_true
-  approx_equal(geokit.longitude(centre), 0.5, 0.0001)
+  approx_equal(geokit.longitude(center), 0.5, 0.0001)
   |> should.be_true
 }
 
@@ -565,10 +565,10 @@ pub fn centroid_of_offset_square_test() -> Nil {
   let assert Ok(b) = geokit.lat_lng(latitude: 10.0, longitude: 22.0)
   let assert Ok(c) = geokit.lat_lng(latitude: 12.0, longitude: 22.0)
   let assert Ok(d) = geokit.lat_lng(latitude: 12.0, longitude: 20.0)
-  let assert Ok(centre) = geokit.centroid(geokit.Polygon([[a, b, c, d, a]]))
-  approx_equal(geokit.latitude(centre), 11.0, 0.0001)
+  let assert Ok(center) = geokit.centroid(geokit.Polygon([[a, b, c, d, a]]))
+  approx_equal(geokit.latitude(center), 11.0, 0.0001)
   |> should.be_true
-  approx_equal(geokit.longitude(centre), 21.0, 0.0001)
+  approx_equal(geokit.longitude(center), 21.0, 0.0001)
   |> should.be_true
 }
 
@@ -637,9 +637,9 @@ pub fn closed_ring_centroid_does_not_count_the_closing_vertex_twice_test() -> Ni
   let assert Ok(mean) = geokit.centroid(geokit.MultiPoint([a, b, c, d, e]))
   geokit.latitude(mean) |> should.equal(0.4)
   geokit.longitude(mean) |> should.equal(0.4)
-  let assert Ok(centre) = geokit.centroid(geokit.Polygon([[a, b, c, d, e]]))
-  geokit.latitude(centre) |> should.equal(0.5)
-  geokit.longitude(centre) |> should.equal(0.5)
+  let assert Ok(center) = geokit.centroid(geokit.Polygon([[a, b, c, d, e]]))
+  geokit.latitude(center) |> should.equal(0.5)
+  geokit.longitude(center) |> should.equal(0.5)
 }
 
 pub fn of_points_unclosed_ring_uses_arithmetic_mean_test() -> Nil {
@@ -647,24 +647,24 @@ pub fn of_points_unclosed_ring_uses_arithmetic_mean_test() -> Nil {
   let assert Ok(b) = geokit.lat_lng(latitude: 0.0, longitude: 1.0)
   let assert Ok(c) = geokit.lat_lng(latitude: 1.0, longitude: 1.0)
   let assert Ok(d) = geokit.lat_lng(latitude: 1.0, longitude: 0.0)
-  let assert Ok(centre) = geokit.centroid(geokit.MultiPoint([a, b, c, d]))
-  geokit.latitude(centre) |> should.equal(0.5)
-  geokit.longitude(centre) |> should.equal(0.5)
+  let assert Ok(center) = geokit.centroid(geokit.MultiPoint([a, b, c, d]))
+  geokit.latitude(center) |> should.equal(0.5)
+  geokit.longitude(center) |> should.equal(0.5)
 }
 
 pub fn multi_point_duplicates_are_kept_test() -> Nil {
   // A repeated point carries weight in the mean.
   let assert Ok(a) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
   let assert Ok(b) = geokit.lat_lng(latitude: 1.0, longitude: 1.0)
-  let assert Ok(centre) = geokit.centroid(geokit.MultiPoint([a, a, b]))
-  geokit.longitude(centre) |> should.equal({ 0.0 +. 0.0 +. 1.0 } /. 3.0)
+  let assert Ok(center) = geokit.centroid(geokit.MultiPoint([a, a, b]))
+  geokit.longitude(center) |> should.equal({ 0.0 +. 0.0 +. 1.0 } /. 3.0)
 }
 
 pub fn of_points_single_point_test() -> Nil {
   let assert Ok(only) = geokit.lat_lng(latitude: 5.0, longitude: 10.0)
-  let assert Ok(centre) = geokit.centroid(geokit.MultiPoint([only]))
-  geokit.latitude(centre) |> should.equal(5.0)
-  geokit.longitude(centre) |> should.equal(10.0)
+  let assert Ok(center) = geokit.centroid(geokit.MultiPoint([only]))
+  geokit.latitude(center) |> should.equal(5.0)
+  geokit.longitude(center) |> should.equal(10.0)
 }
 
 pub fn of_points_empty_errors_test() -> Nil {
@@ -699,7 +699,7 @@ pub fn centroid_of_long_closed_ring_test() -> Nil {
 
 pub fn closed_ring_with_signed_zero_test() -> Nil {
   // First (0.0, 0.0) and last (-0.0, -0.0) are the same vertex, so the
-  // ring is closed and its centroid is the square's centre.
+  // ring is closed and its centroid is the square's center.
   geokit.wrap_lat_lng(latitude: -0.0, longitude: -0.0)
   |> should.equal(geokit.wrap_lat_lng(latitude: 0.0, longitude: 0.0))
   let assert Ok(c) =
@@ -766,8 +766,8 @@ fn close_to(c: geokit.LatLng, lng: Float, lat: Float) -> Nil {
 
 pub fn centroid_of_polygon_with_hole_test() -> Nil {
   // Shapely: Polygon(square, [hole]).centroid == (440 / 76, 5.0). The
-  // hole (area 24, centre (2.5, 5)) is subtracted from the square
-  // (area 100, centre (5, 5)), whatever the ring orientation.
+  // hole (area 24, center (2.5, 5)) is subtracted from the square
+  // (area 100, center (5, 5)), whatever the ring orientation.
   let assert Ok(c) =
     geokit.centroid(geokit.Polygon([outer_square(), west_hole()]))
   close_to(c, 440.0 /. 76.0, 5.0)
@@ -778,7 +778,7 @@ pub fn centroid_of_polygon_with_hole_test() -> Nil {
 
 pub fn centroid_of_multipolygon_is_area_weighted_test() -> Nil {
   // Shapely: MultiPolygon([square, small]).centroid == (584 / 104,
-  // 504 / 104). A plain mean of the two centres would give (13, 3).
+  // 504 / 104). A plain mean of the two centers would give (13, 3).
   let assert Ok(c) =
     geokit.centroid(geokit.MultiPolygon([[outer_square()], [small_square()]]))
   close_to(c, 584.0 /. 104.0, 504.0 /. 104.0)
@@ -1230,7 +1230,7 @@ fn square_ring() -> List(LatLng) {
   [at(0.0, 0.0), at(0.0, 10.0), at(10.0, 10.0), at(10.0, 0.0), at(0.0, 0.0)]
 }
 
-/// Closed 4 × 4 hole centred inside `square_ring`.
+/// Closed 4 × 4 hole centerd inside `square_ring`.
 fn hole_ring() -> List(LatLng) {
   [at(3.0, 3.0), at(7.0, 3.0), at(7.0, 7.0), at(3.0, 7.0), at(3.0, 3.0)]
 }
@@ -1422,7 +1422,7 @@ pub fn left_and_right_of_vertical_edges_test() -> Nil {
 }
 
 /// A diamond whose east and west vertices share the latitude of its
-/// centre, so an eastward ray from the centre row passes through a
+/// center, so an eastward ray from the center row passes through a
 /// vertex.
 fn diamond() -> geokit.Geometry {
   geokit.Polygon([

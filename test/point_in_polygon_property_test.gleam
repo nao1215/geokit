@@ -344,9 +344,9 @@ pub fn pbt_rectangle_with_hole_matches_oracle_test() -> Nil {
 }
 
 pub fn pbt_diamond_matches_oracle_test() -> Nil {
-  // A diamond (a square rotated 45°) centred at `centre` with
-  // "radius" `radius`: the Manhattan distance from the centre decides
-  // the answer. Its east and west vertices share the centre's
+  // A diamond (a square rotated 45°) centerd at `center` with
+  // "radius" `radius`: the Manhattan distance from the center decides
+  // the answer. Its east and west vertices share the center's
   // latitude, so rays through vertices are exercised constantly.
   metamon.forall(
     generator.tuple3(
@@ -355,16 +355,16 @@ pub fn pbt_diamond_matches_oracle_test() -> Nil {
       generator.tuple2(whole_degrees(-10, 10), whole_degrees(-10, 10)),
     ),
     fn(input) {
-      let #(centre, radius, delta) = input
-      let lat = geokit.latitude(centre)
-      let lng = geokit.longitude(centre)
+      let #(center, radius, delta) = input
+      let lat = geokit.latitude(center)
+      let lng = geokit.longitude(center)
       let ring = [
         geokit.wrap_lat_lng(latitude: lat -. radius, longitude: lng),
         geokit.wrap_lat_lng(latitude: lat, longitude: lng +. radius),
         geokit.wrap_lat_lng(latitude: lat +. radius, longitude: lng),
         geokit.wrap_lat_lng(latitude: lat, longitude: lng -. radius),
       ]
-      let point = translate_by(delta)(centre)
+      let point = translate_by(delta)(center)
       let manhattan =
         float.absolute_value(delta.0) +. float.absolute_value(delta.1)
       let expected = case manhattan <. radius, manhattan == radius {

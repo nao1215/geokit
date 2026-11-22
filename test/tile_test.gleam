@@ -86,7 +86,7 @@ pub fn known_tile_at_zoom_2_test() -> Nil {
 }
 
 pub fn lat_lng_round_trip_test() -> Nil {
-  // For a point at the tile centre, projecting to a tile then back
+  // For a point at the tile center, projecting to a tile then back
   // recovers a point inside the same tile.
   let assert Ok(point) = geokit.lat_lng(latitude: 35.68, longitude: 139.77)
   let assert Ok(t) = tile.from_lat_lng(point, zoom: 10)

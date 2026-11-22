@@ -64,8 +64,8 @@ pub type Location {
   Outside
 }
 
-/// Mean Earth radius (WGS84), in metres.
-const earth_radius_metres: Float = 6_371_008.8
+/// Mean Earth radius (WGS84), in meters.
+const earth_radius_meters: Float = 6_371_008.8
 
 // --- LatLng ---------------------------------------------------------------
 
@@ -181,7 +181,7 @@ pub fn longitude(point: LatLng) -> Float {
 
 // --- Distance and bearing -------------------------------------------------
 
-/// Returns the great-circle distance in metres, computed with the
+/// Returns the great-circle distance in meters, computed with the
 /// haversine formula on a sphere of radius 6,371,008.8 m.
 ///
 /// ## Examples
@@ -208,7 +208,7 @@ pub fn distance(from from: LatLng, to to: LatLng) -> Float {
     *. sin_half_lng
   let h = float.clamp(h, min: 0.0, max: 1.0)
   let central_angle = 2.0 *. maths.atan2(sqrt_nonneg(h), sqrt_nonneg(1.0 -. h))
-  earth_radius_metres *. central_angle
+  earth_radius_meters *. central_angle
 }
 
 // Callers pass values in [0, 1], so `float.square_root` cannot fail.

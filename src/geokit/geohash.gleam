@@ -368,8 +368,8 @@ fn step(
       // the neighbor string*: find the position of `last` in the
       // neighbor table, and that position indexes the base32
       // alphabet to give the new character. (Not: find the base32
-      // index of `last`, look up that position in the neighbor table
-      // — which is the easy mistake.)
+      // index of `last` and look up that position in the neighbor
+      // table, which is the easy mistake.)
       case index_of(char: last, table: lookup) {
         Error(Nil) ->
           Error(InvalidCharacter(

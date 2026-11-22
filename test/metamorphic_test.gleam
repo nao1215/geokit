@@ -69,9 +69,9 @@ fn both(f: fn(LatLng) -> LatLng) -> fn(Pair) -> Pair {
 /// Equal up to the rounding of the trigonometric calls: within 1 cm, or
 /// 1e-9 of distances up to half the circumference (about 2.0e7 m). The
 /// absolute part covers the poles, where cos(90 degrees) is about 6e-17
-/// rather than 0 and two spellings of the same pole are a few millimetres
+/// rather than 0 and two spellings of the same pole are a few millimeters
 /// apart.
-fn close_metres() -> relation.Relation(Float) {
+fn close_meters() -> relation.Relation(Float) {
   relation.new("within 1 cm or 1e-9 relative", fn(a, b) {
     let diff = float.absolute_value(a -. b)
     diff <=. 1.0e-2 || diff <=. 1.0e-9 *. float.max(a, b)
@@ -79,7 +79,7 @@ fn close_metres() -> relation.Relation(Float) {
 }
 
 pub fn distance_is_invariant_under_shared_moves_test() -> Nil {
-  let rel = close_metres()
+  let rel = close_meters()
   let haversine = fn(input: Pair) {
     geokit.distance(from: input.0, to: input.1)
   }
@@ -120,7 +120,7 @@ fn angle_between(a: Float, b: Float) -> Float {
   }
 }
 
-fn normalise(b: Float) -> Float {
+fn normalize(b: Float) -> Float {
   case b <. 0.0, b >=. 360.0 {
     True, _ -> b +. 360.0
     _, True -> b -. 360.0
@@ -159,13 +159,13 @@ pub fn bearing_mirrors_with_the_points_test() -> Nil {
       metamon.mr_equivariant(
         name: "mirror across the prime meridian gives 360 - b",
         input: transform.new("mirror lng", both(mirror_lng)),
-        output: transform.new("360 - b", fn(b) { normalise(360.0 -. b) }),
+        output: transform.new("360 - b", fn(b) { normalize(360.0 -. b) }),
         relation: close,
       ),
       metamon.mr_equivariant(
         name: "mirror across the equator gives 180 - b",
         input: transform.new("mirror lat", both(mirror_lat)),
-        output: transform.new("180 - b", fn(b) { normalise(180.0 -. b) }),
+        output: transform.new("180 - b", fn(b) { normalize(180.0 -. b) }),
         relation: close,
       ),
     ],

@@ -1,5 +1,5 @@
 //// Every code block in `README.md` is exercised here so that a
-//// rename or behaviour change in the public API surfaces as a build
+//// rename or behavior change in the public API surfaces as a build
 //// failure rather than silently-stale documentation. The snippets in
 //// this file mirror the README byte-for-byte; the `_test` functions
 //// below assert the values the README claims for each snippet.
@@ -40,13 +40,13 @@ pub fn tokyo_to_osaka() -> #(Float, Float) {
 }
 
 pub fn readme_tokyo_to_osaka_test() -> Nil {
-  let #(metres, deg) = tokyo_to_osaka()
+  let #(meters, deg) = tokyo_to_osaka()
   // The README claims ≈ 402_784.74 m and ≈ 255.42°.
-  close_to(metres, 402_784.74, 0.01) |> should.be_true
+  close_to(meters, 402_784.74, 0.01) |> should.be_true
   close_to(deg, 255.42, 0.01) |> should.be_true
 }
 
-// --- latlng.wrap normalisation -----------------------------------------
+// --- latlng.wrap normalization -----------------------------------------
 
 pub fn antimeridian_wrap() -> #(Float, Float) {
   let point = geokit.wrap_lat_lng(latitude: 91.0, longitude: 181.0)
@@ -57,32 +57,32 @@ pub fn readme_antimeridian_wrap_test() -> Nil {
   antimeridian_wrap() |> should.equal(#(90.0, -179.0))
 }
 
-// --- Geohash encode, decode, neighbours --------------------------------
+// --- Geohash encode, decode, neighbors --------------------------------
 
 pub fn around_tokyo() -> #(String, geokit.LatLng, geohash.Neighbors) {
   let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
   let assert Ok(hash) = geohash.encode(tokyo, precision: 8)
-  let assert Ok(centre) = geohash.decode(hash)
-  let assert Ok(neighbours) = geohash.neighbors(hash)
-  #(hash, centre, neighbours)
+  let assert Ok(center) = geohash.decode(hash)
+  let assert Ok(neighbors) = geohash.neighbors(hash)
+  #(hash, center, neighbors)
 }
 
 pub fn readme_around_tokyo_test() -> Nil {
-  let #(hash, centre, neighbours) = around_tokyo()
+  let #(hash, center, neighbors) = around_tokyo()
   // The README states `hash == "xn76urx6"` for Tokyo at precision 8.
   hash |> should.equal("xn76urx6")
-  // The centre is the geohash cell's midpoint — close to but not
+  // The center is the geohash cell's midpoint — close to but not
   // identical to Tokyo; precision 8 is ~38 m × 19 m, so this
   // tolerance is conservative.
-  close_to(geokit.latitude(centre), 35.6812, 0.001) |> should.be_true
-  close_to(geokit.longitude(centre), 139.7671, 0.001) |> should.be_true
+  close_to(geokit.latitude(center), 35.6812, 0.001) |> should.be_true
+  close_to(geokit.longitude(center), 139.7671, 0.001) |> should.be_true
   // The README claims `neighbors` returns all eight directions.
   // Each direction must yield a hash of the same length.
   let prec = 8
-  { neighbours.north |> string_length_check(prec) } |> should.be_true
-  { neighbours.east |> string_length_check(prec) } |> should.be_true
-  { neighbours.south |> string_length_check(prec) } |> should.be_true
-  { neighbours.west |> string_length_check(prec) } |> should.be_true
+  { neighbors.north |> string_length_check(prec) } |> should.be_true
+  { neighbors.east |> string_length_check(prec) } |> should.be_true
+  { neighbors.south |> string_length_check(prec) } |> should.be_true
+  { neighbors.west |> string_length_check(prec) } |> should.be_true
 }
 
 fn string_length_check(s: String, target: Int) -> Bool {
@@ -217,21 +217,21 @@ pub fn polygon_ops() {
   let polygon = geokit.Polygon([[a, b, c, d, a]])
 
   let assert Ok(#(sw, ne)) = bbox(polygon)
-  let assert Ok(centre) = geokit.centroid(polygon)
+  let assert Ok(center) = geokit.centroid(polygon)
   let assert Ok(reduced) = simplify_line([a, b, c, d], tolerance: 0.001)
-  #(sw, ne, centre, reduced)
+  #(sw, ne, center, reduced)
 }
 
 pub fn readme_polygon_ops_test() -> Nil {
-  let #(sw, ne, centre, reduced) = polygon_ops()
+  let #(sw, ne, center, reduced) = polygon_ops()
   geokit.latitude(sw) |> should.equal(0.0)
   geokit.longitude(sw) |> should.equal(0.0)
   geokit.latitude(ne) |> should.equal(10.0)
   geokit.longitude(ne) |> should.equal(10.0)
   // The signed-area centroid of an axis-aligned 10 × 10 square is
-  // at its geometric centre.
-  geokit.latitude(centre) |> should.equal(5.0)
-  geokit.longitude(centre) |> should.equal(5.0)
+  // at its geometric center.
+  geokit.latitude(center) |> should.equal(5.0)
+  geokit.longitude(center) |> should.equal(5.0)
   // Douglas-Peucker on a square at very small tolerance keeps every
   // corner (no two points are collinear within 0.001°).
   list.length(reduced) |> should.equal(4)
