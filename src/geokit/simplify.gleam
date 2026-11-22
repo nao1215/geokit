@@ -65,7 +65,7 @@ pub fn line_string(
     [] -> Ok([])
     [single] -> Ok([single])
     [a, b] -> Ok([a, b])
-    _ -> Ok(dp(points: points, tolerance: tolerance))
+    [first, ..rest] -> Ok(dp(first: first, rest: rest, tolerance: tolerance))
   }
 }
 
@@ -158,81 +158,99 @@ fn simplify_polygons(
   }
 }
 
-fn dp(points points: List(LatLng), tolerance tolerance: Float) -> List(LatLng) {
-  let length = list.length(points)
-  case length <= 2 {
-    True -> points
-    False -> {
-      let first = first_or_default(points)
-      let last = last_or_default(points, first)
-      let middle = middle_of(points)
-      let #(max_dist, max_index) =
-        max_perp_distance(
-          middle: middle,
-          a: first,
-          b: last,
-          index: 1,
-          best_dist: 0.0,
-          best_index: 0,
-        )
-      case max_dist >. tolerance {
-        True -> {
-          let left_part = list.take(points, max_index + 1)
-          let right_part = list.drop(points, max_index)
-          let left = dp(points: left_part, tolerance: tolerance)
-          let right = dp(points: right_part, tolerance: tolerance)
-          merge_skipping_duplicate_pivot(left, right)
-        }
-        False -> [first, last]
+// A span of the input between two kept points: `first`, the points in
+// between (in input order) and `last`.
+type Span {
+  Span(first: LatLng, middle: List(LatLng), last: LatLng)
+}
+
+// Douglas-Peucker with an explicit stack of spans instead of recursion,
+// so a split that peels one point per level (a zigzag) cannot exhaust
+// the stack on JavaScript. Spans are processed left to right; when a
+// span needs no split its `first` is kept, and the input's last point
+// closes the output.
+fn dp(
+  first first: LatLng,
+  rest rest: List(LatLng),
+  tolerance tolerance: Float,
+) -> List(LatLng) {
+  case list.reverse(rest) {
+    [] -> [first]
+    [last, ..middle_reversed] ->
+      dp_loop(
+        stack: [Span(first:, middle: list.reverse(middle_reversed), last:)],
+        tolerance: tolerance,
+        kept: [],
+        end: last,
+      )
+  }
+}
+
+fn dp_loop(
+  stack stack: List(Span),
+  tolerance tolerance: Float,
+  kept kept: List(LatLng),
+  end end: LatLng,
+) -> List(LatLng) {
+  case stack {
+    [] -> list.reverse([end, ..kept])
+    [span, ..rest] ->
+      case farthest(span: span) {
+        Ok(#(distance, left, right)) if distance >. tolerance ->
+          dp_loop(stack: [left, right, ..rest], tolerance:, kept:, end:)
+        _ -> dp_loop(stack: rest, tolerance:, kept: [span.first, ..kept], end:)
       }
+  }
+}
+
+// One pass over `span.middle` that finds the point farthest from the
+// chord `first`-`last` (the earliest one on ties) and returns its
+// distance with the two spans either side of it. The prefix before the
+// candidate is the reversed accumulator at the moment it was found and
+// the suffix is the remaining tail, so no second pass is needed to
+// split. Returns `Error(Nil)` when the span has no middle points.
+fn farthest(span span: Span) -> Result(#(Float, Span, Span), Nil) {
+  case span.middle {
+    [] -> Error(Nil)
+    [head, ..tail] -> {
+      let #(distance, before, pivot, after) =
+        farthest_loop(
+          points: tail,
+          a: span.first,
+          b: span.last,
+          seen: [head],
+          best: #(
+            perpendicular_distance(p: head, a: span.first, b: span.last),
+            [],
+            head,
+            tail,
+          ),
+        )
+      Ok(#(
+        distance,
+        Span(first: span.first, middle: list.reverse(before), last: pivot),
+        Span(first: pivot, middle: after, last: span.last),
+      ))
     }
   }
 }
 
-fn merge_skipping_duplicate_pivot(
-  left: List(LatLng),
-  right: List(LatLng),
-) -> List(LatLng) {
-  // The last element of `left` and the first element of `right` are
-  // the same pivot point; concatenate but drop the duplicate.
-  case right {
-    [] -> left
-    [_, ..tail] -> list.append(left, tail)
-  }
-}
-
-fn max_perp_distance(
-  middle middle: List(LatLng),
+fn farthest_loop(
+  points points: List(LatLng),
   a a: LatLng,
   b b: LatLng,
-  index index: Int,
-  best_dist best_dist: Float,
-  best_index best_index: Int,
-) -> #(Float, Int) {
-  case middle {
-    [] -> #(best_dist, best_index)
+  seen seen: List(LatLng),
+  best best: #(Float, List(LatLng), LatLng, List(LatLng)),
+) -> #(Float, List(LatLng), LatLng, List(LatLng)) {
+  case points {
+    [] -> best
     [head, ..tail] -> {
-      let d = perpendicular_distance(p: head, a: a, b: b)
-      case d >. best_dist {
-        True ->
-          max_perp_distance(
-            middle: tail,
-            a: a,
-            b: b,
-            index: index + 1,
-            best_dist: d,
-            best_index: index,
-          )
-        False ->
-          max_perp_distance(
-            middle: tail,
-            a: a,
-            b: b,
-            index: index + 1,
-            best_dist: best_dist,
-            best_index: best_index,
-          )
+      let distance = perpendicular_distance(p: head, a: a, b: b)
+      let best = case distance >. best.0 {
+        True -> #(distance, seen, head, tail)
+        False -> best
       }
+      farthest_loop(points: tail, a: a, b: b, seen: [head, ..seen], best: best)
     }
   }
 }
@@ -280,37 +298,4 @@ fn newton_sqrt(
     guess: { guess +. value /. guess } /. 2.0,
     iterations: iterations - 1,
   )
-}
-
-// --- list helpers --------------------------------------------------------
-
-fn first_or_default(points: List(LatLng)) -> LatLng {
-  case points {
-    [] -> latlng.wrap(lat: 0.0, lng: 0.0)
-    [head, ..] -> head
-  }
-}
-
-fn last_or_default(points: List(LatLng), fallback: LatLng) -> LatLng {
-  case points {
-    [] -> fallback
-    [single] -> single
-    [_, ..tail] -> last_or_default(tail, fallback)
-  }
-}
-
-fn middle_of(points: List(LatLng)) -> List(LatLng) {
-  case points {
-    [] -> []
-    [_] -> []
-    [_, ..tail] -> drop_last(tail)
-  }
-}
-
-fn drop_last(points: List(LatLng)) -> List(LatLng) {
-  case points {
-    [] -> []
-    [_] -> []
-    [head, ..tail] -> [head, ..drop_last(tail)]
-  }
 }

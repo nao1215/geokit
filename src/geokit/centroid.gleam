@@ -70,38 +70,16 @@ pub fn of_points(points points: List(LatLng)) -> Result(LatLng, CentroidError) {
 /// more vertices (first == last). Empty lists, single-vertex lists,
 /// and two-vertex lists pass through unchanged.
 fn drop_closing_duplicate(points: List(LatLng)) -> List(LatLng) {
-  case points {
-    [] -> points
-    [_] -> points
-    [_, _] -> points
-    [first, ..] ->
-      case last_in_list(points) {
-        Ok(last) ->
-          case
-            latlng.lat(first) == latlng.lat(last)
-            && latlng.lng(first) == latlng.lng(last)
-          {
-            True -> drop_last(points)
-            False -> points
-          }
-        Error(Nil) -> points
+  case points, list.reverse(points) {
+    [first, _, _, ..], [last, ..before_last] ->
+      case
+        latlng.lat(first) == latlng.lat(last)
+        && latlng.lng(first) == latlng.lng(last)
+      {
+        True -> list.reverse(before_last)
+        False -> points
       }
-  }
-}
-
-fn last_in_list(items: List(LatLng)) -> Result(LatLng, Nil) {
-  case items {
-    [] -> Error(Nil)
-    [only] -> Ok(only)
-    [_, ..rest] -> last_in_list(rest)
-  }
-}
-
-fn drop_last(items: List(LatLng)) -> List(LatLng) {
-  case items {
-    [] -> []
-    [_] -> []
-    [head, ..tail] -> [head, ..drop_last(tail)]
+    _, _ -> points
   }
 }
 
@@ -121,27 +99,12 @@ fn mean_of_points(
 ) -> Result(LatLng, CentroidError) {
   use <- bool.guard(when: list.is_empty(points), return: Error(EmptyGeometry))
   let #(sum_lat, sum_lng, count) =
-    sum_points(points: points, sum_lat: 0.0, sum_lng: 0.0, count: 0)
-  let count_f = int_to_float(count)
+    list.fold(points, #(0.0, 0.0, 0), fn(sums, p) {
+      let #(sum_lat, sum_lng, count) = sums
+      #(sum_lat +. latlng.lat(p), sum_lng +. latlng.lng(p), count + 1)
+    })
+  let count_f = int.to_float(count)
   Ok(latlng.wrap(lat: sum_lat /. count_f, lng: sum_lng /. count_f))
-}
-
-fn sum_points(
-  points points: List(LatLng),
-  sum_lat sum_lat: Float,
-  sum_lng sum_lng: Float,
-  count count: Int,
-) -> #(Float, Float, Int) {
-  case points {
-    [] -> #(sum_lat, sum_lng, count)
-    [head, ..tail] ->
-      sum_points(
-        points: tail,
-        sum_lat: sum_lat +. latlng.lat(head),
-        sum_lng: sum_lng +. latlng.lng(head),
-        count: count + 1,
-      )
-  }
 }
 
 fn polygon_centroid(
@@ -201,28 +164,13 @@ fn ring_sums(
 }
 
 fn ensure_closed(points points: List(LatLng)) -> List(LatLng) {
-  case points {
-    [] -> []
-    [head, ..] -> {
-      let last = last_of(points: points, fallback: head)
-      use <- bool.guard(when: latlng.equal(head, last), return: points)
-      append_one(items: points, value: head)
-    }
-  }
-}
-
-fn last_of(points points: List(LatLng), fallback fallback: LatLng) -> LatLng {
-  case points {
-    [] -> fallback
-    [single] -> single
-    [_, ..tail] -> last_of(points: tail, fallback: fallback)
-  }
-}
-
-fn append_one(items items: List(LatLng), value value: LatLng) -> List(LatLng) {
-  case items {
-    [] -> [value]
-    [head, ..tail] -> [head, ..append_one(items: tail, value: value)]
+  case points, list.last(points) {
+    [first, ..], Ok(last) ->
+      case latlng.equal(first, last) {
+        True -> points
+        False -> list.append(points, [first])
+      }
+    _, _ -> points
   }
 }
 
@@ -235,8 +183,4 @@ fn multipolygon_centroid(
     [] -> Error(EmptyGeometry)
     _ -> mean_of_points(points: centroids)
   }
-}
-
-fn int_to_float(value: Int) -> Float {
-  int.to_float(value)
 }

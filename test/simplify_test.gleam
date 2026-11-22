@@ -1,3 +1,4 @@
+import gleam/int
 import gleam/list
 import gleeunit/should
 
@@ -200,4 +201,67 @@ pub fn compute_negative_tolerance_test() -> Nil {
     Error(simplify.NegativeTolerance(tolerance: -0.5)) -> Nil
     _ -> should.be_true(False)
   }
+}
+
+// --- long inputs (20_000 points) ----------------------------------------
+
+// 20_000 points walking the perimeter of the square [0, 10] x [0, 10]
+// counter-clockwise from (0, 0). The ring is not closed.
+fn square_perimeter() -> List(latlng.LatLng) {
+  list.repeat(Nil, times: 20_000)
+  |> list.index_map(fn(_, i) {
+    let side = i / 5000
+    let t = int.to_float(i % 5000) /. 500.0
+    case side {
+      0 -> latlng.wrap(lat: 0.0, lng: t)
+      1 -> latlng.wrap(lat: t, lng: 10.0)
+      2 -> latlng.wrap(lat: 10.0, lng: 10.0 -. t)
+      _ -> latlng.wrap(lat: 10.0 -. t, lng: 0.0)
+    }
+  })
+}
+
+pub fn simplify_long_square_test() -> Nil {
+  let assert Ok(simplified) =
+    simplify.line_string(points: square_perimeter(), tolerance: 1.0e-6)
+  // Only the start and the three later corners survive.
+  list.map(simplified, fn(p) { #(latlng.lat(p), latlng.lng(p)) })
+  |> should.equal([
+    #(0.0, 0.0),
+    #(0.0, 10.0),
+    #(10.0, 10.0),
+    #(10.0, 0.0),
+    #(10.0 -. 4999.0 /. 500.0, 0.0),
+  ])
+}
+
+pub fn simplify_long_random_walk_test() -> Nil {
+  let walk = random_walk(20_000)
+  let assert Ok(simplified) =
+    simplify.line_string(points: walk, tolerance: 0.05)
+  // Count recorded from the recursive implementation this replaced
+  // (it ran on Erlang; JavaScript overflowed its stack).
+  list.length(simplified)
+  |> should.equal(9694)
+  list.first(simplified)
+  |> should.equal(list.first(walk))
+  list.last(simplified)
+  |> should.equal(list.last(walk))
+}
+
+// Deterministic random walk from the Park-Miller generator (products
+// stay below 2^53, so both targets agree).
+fn random_walk(n: Int) -> List(latlng.LatLng) {
+  let #(_, _, _, points) =
+    list.fold(list.repeat(Nil, times: n), #(12_345, 0.0, 0.0, []), fn(acc, _) {
+      let #(seed, lat, lng, points) = acc
+      let seed = seed * 16_807 % 2_147_483_647
+      let step_lat = int.to_float(seed % 2001 - 1000) /. 10_000.0
+      let seed = seed * 16_807 % 2_147_483_647
+      let step_lng = int.to_float(seed % 2001 - 1000) /. 10_000.0
+      let lat = lat +. step_lat
+      let lng = lng +. step_lng
+      #(seed, lat, lng, [latlng.wrap(lat: lat, lng: lng), ..points])
+    })
+  list.reverse(points)
 }

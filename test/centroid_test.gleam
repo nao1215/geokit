@@ -1,3 +1,5 @@
+import gleam/int
+import gleam/list
 import gleeunit/should
 
 import geokit/centroid
@@ -172,4 +174,41 @@ pub fn of_points_empty_errors_test() -> Nil {
     Error(centroid.EmptyGeometry) -> Nil
     _ -> should.be_true(False)
   }
+}
+
+// --- long inputs (20_000 points) ----------------------------------------
+
+// 20_000 points walking the perimeter of the square [0, 10] x [0, 10]
+// counter-clockwise from (0, 0). The ring is not closed.
+fn square_perimeter() -> List(latlng.LatLng) {
+  list.repeat(Nil, times: 20_000)
+  |> list.index_map(fn(_, i) {
+    let side = i / 5000
+    let t = int.to_float(i % 5000) /. 500.0
+    case side {
+      0 -> latlng.wrap(lat: 0.0, lng: t)
+      1 -> latlng.wrap(lat: t, lng: 10.0)
+      2 -> latlng.wrap(lat: 10.0, lng: 10.0 -. t)
+      _ -> latlng.wrap(lat: 10.0 -. t, lng: 0.0)
+    }
+  })
+}
+
+pub fn centroid_of_long_polygon_test() -> Nil {
+  let assert Ok(c) =
+    centroid.compute(geometry: geometry.Polygon([square_perimeter()]))
+  approx_equal(latlng.lat(c), 5.0, 1.0e-9)
+  |> should.be_true
+  approx_equal(latlng.lng(c), 5.0, 1.0e-9)
+  |> should.be_true
+}
+
+pub fn centroid_of_long_closed_ring_points_test() -> Nil {
+  let ring = square_perimeter()
+  let closed = list.append(ring, list.take(ring, 1))
+  let assert Ok(c) = centroid.of_points(points: closed)
+  approx_equal(latlng.lat(c), 5.0, 1.0e-9)
+  |> should.be_true
+  approx_equal(latlng.lng(c), 5.0, 1.0e-9)
+  |> should.be_true
 }
