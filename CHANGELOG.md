@@ -7,6 +7,23 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+### Fixed
+
+- `geohash.neighbor` steps east or west across the antimeridian. `neighbor("0", West)` returned `Error(EmptyHash)` and now returns `Ok("p")`.
+- `geohash.neighbor` and `neighbors` check every character, not only the last one.
+- On JavaScript, `polyline.decode` no longer overflows the stack at about 2,000 points, and `bbox`, `centroid` and `simplify` no longer overflow at about 20,000 points.
+- GeoJSON with integer coordinates such as `[139, 35]` decodes on Erlang. Before, it failed on Erlang and succeeded on JavaScript.
+- Ring closure checks and `latlng.equal` treat `-0.0` and `0.0` as the same position on both targets.
+- `centroid.compute` weights a `MultiPolygon` by area and subtracts holes. Before, it averaged the polygon centroids and ignored holes.
+- `simplify.compute` keeps a closed ring valid. Before, a large tolerance collapsed a ring to 2 positions, which `geojson` could not read back.
+- `distance.haversine` is accurate for points less than a metre apart.
+- `polyline.decode` rejects DEL (0x7F) and runs of more than 10 continuation chunks, and reports the grapheme and its index in `InvalidCharacter`.
+- `latlng.new` rejects NaN on JavaScript.
+
+### Changed
+
+- `simplify` is about 7 times faster on 10,000 points.
+
 ## [0.8.0] - 2026-11-19
 
 ### Removed
