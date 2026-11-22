@@ -1,4 +1,6 @@
+import gleam/int
 import gleam/list
+import gleam/string
 import gleeunit/should
 
 import geokit/latlng
@@ -158,4 +160,54 @@ pub fn decode_with_rejects_too_large_precision_test() -> Nil {
     Error(polyline.PrecisionOutOfRange(precision: 12)) -> Nil
     _ -> should.be_true(False)
   }
+}
+
+// --- character range and chunk limits -----------------------------------
+
+pub fn decode_rejects_del_test() -> Nil {
+  // Valid polyline characters are 63..126; DEL (127) is outside.
+  polyline.decode(input: "??\u{7F}?")
+  |> should.equal(Error(polyline.InvalidCharacter(char: "\u{7F}", position: 2)))
+}
+
+pub fn decode_rejects_non_ascii_test() -> Nil {
+  polyline.decode(input: "??é?")
+  |> should.equal(Error(polyline.InvalidCharacter(char: "é", position: 2)))
+}
+
+pub fn decode_rejects_chunk_beyond_32_bits_test() -> Nil {
+  // Seven chunks cover a 32-bit value (shifts 0..30); an eighth
+  // continuation chunk is outside the format.
+  polyline.decode(input: "_______?")
+  |> should.equal(Error(polyline.InvalidCharacter(char: "?", position: 7)))
+  polyline.decode(input: string.repeat("_", 40) <> "??")
+  |> should.equal(Error(polyline.InvalidCharacter(char: "_", position: 7)))
+}
+
+pub fn decode_accepts_seven_chunks_test() -> Nil {
+  // Six continuation chunks and a stop chunk: the largest legal width.
+  let assert Ok(_) = polyline.decode(input: "______??")
+  Nil
+}
+
+// --- long inputs --------------------------------------------------------
+
+pub fn decode_long_polyline_test() -> Nil {
+  // 100_000 points must decode without exhausting the stack on either
+  // target.
+  let points =
+    list.repeat(Nil, times: 100_000)
+    |> list.index_map(fn(_, i) {
+      latlng.wrap(
+        lat: int.to_float(i % 1000) /. 100.0,
+        lng: int.to_float(i % 777) /. 100.0,
+      )
+    })
+  let encoded = polyline.encode(points: points)
+  let assert Ok(decoded) = polyline.decode(input: encoded)
+  list.length(decoded)
+  |> should.equal(100_000)
+  list.zip(points, decoded)
+  |> list.all(fn(pair) { latlng.equal(pair.0, pair.1) })
+  |> should.be_true
 }

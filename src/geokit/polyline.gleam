@@ -8,6 +8,7 @@
 //// Specification:
 //// <https://developers.google.com/maps/documentation/utilities/polylinealgorithmformat>.
 
+import gleam/bit_array
 import gleam/bool
 import gleam/float
 import gleam/int
@@ -76,13 +77,13 @@ fn encode_unchecked(
   points points: List(LatLng),
   precision precision: Int,
 ) -> String {
-  let factor = pow10(precision)
+  let factor = scale_factor(precision)
   encode_loop(points: points, factor: factor, last_lat: 0, last_lng: 0, acc: "")
 }
 
 fn encode_loop(
   points points: List(LatLng),
-  factor factor: Int,
+  factor factor: Float,
   last_lat last_lat: Int,
   last_lng last_lng: Int,
   acc acc: String,
@@ -90,8 +91,8 @@ fn encode_loop(
   case points {
     [] -> acc
     [head, ..tail] -> {
-      let lat_scaled = round_to_int(latlng.lat(head) *. int_to_float(factor))
-      let lng_scaled = round_to_int(latlng.lng(head) *. int_to_float(factor))
+      let lat_scaled = round_to_int(latlng.lat(head) *. factor)
+      let lng_scaled = round_to_int(latlng.lng(head) *. factor)
       let lat_delta = lat_scaled - last_lat
       let lng_delta = lng_scaled - last_lng
       encode_loop(
@@ -155,10 +156,11 @@ pub fn decode_with(
     when: precision < 1 || precision > 11,
     return: Error(PrecisionOutOfRange(precision: precision)),
   )
-  let factor = pow10(precision)
-  use #(raw_points, _) <- result.try(
+  let factor = scale_factor(precision)
+  use raw_points <- result.try(
     decode_loop(
-      chars: string.to_graphemes(input),
+      input: input,
+      bytes: bit_array.from_string(input),
       position: 0,
       last_lat: 0,
       last_lng: 0,
@@ -166,52 +168,75 @@ pub fn decode_with(
     ),
   )
   Ok(
-    raw_points
-    |> list.reverse
+    list.reverse(raw_points)
     |> list.map(fn(scaled) {
       let #(lat_int, lng_int) = scaled
-      let lat = int_to_float(lat_int) /. int_to_float(factor)
-      let lng = int_to_float(lng_int) /. int_to_float(factor)
+      let lat = int.to_float(lat_int) /. factor
+      let lng = int.to_float(lng_int) /. factor
       latlng.wrap(lat: lat, lng: lng)
     }),
   )
 }
 
+// The input is walked byte by byte. Every valid character is ASCII, so
+// up to the first invalid byte the byte offset equals the grapheme
+// position reported in `InvalidCharacter`; `input` is kept to slice
+// out the offending grapheme.
 fn decode_loop(
-  chars chars: List(String),
+  input input: String,
+  bytes bytes: BitArray,
   position position: Int,
   last_lat last_lat: Int,
   last_lng last_lng: Int,
   acc acc: List(#(Int, Int)),
-) -> Result(#(List(#(Int, Int)), Int), PolylineError) {
-  case chars {
-    [] -> Ok(#(acc, position))
-    _ -> {
-      use #(lat_delta, after_lat_chars, after_lat_pos) <- result.try(
-        decode_signed(chars: chars, position: position),
-      )
-      use #(lng_delta, after_lng_chars, after_lng_pos) <- result.try(
-        decode_signed(chars: after_lat_chars, position: after_lat_pos),
-      )
-      let new_lat = last_lat + lat_delta
-      let new_lng = last_lng + lng_delta
-      decode_loop(
-        chars: after_lng_chars,
-        position: after_lng_pos,
-        last_lat: new_lat,
-        last_lng: new_lng,
-        acc: [#(new_lat, new_lng), ..acc],
-      )
-    }
+) -> Result(List(#(Int, Int)), PolylineError) {
+  case bytes {
+    <<>> -> Ok(acc)
+    _ ->
+      case decode_pair(input: input, bytes: bytes, position: position) {
+        Error(error) -> Error(error)
+        Ok(#(lat_delta, lng_delta, rest, after)) -> {
+          let new_lat = last_lat + lat_delta
+          let new_lng = last_lng + lng_delta
+          decode_loop(
+            input: input,
+            bytes: rest,
+            position: after,
+            last_lat: new_lat,
+            last_lng: new_lng,
+            acc: [#(new_lat, new_lng), ..acc],
+          )
+        }
+      }
   }
 }
 
-fn decode_signed(
-  chars chars: List(String),
+fn decode_pair(
+  input input: String,
+  bytes bytes: BitArray,
   position position: Int,
-) -> Result(#(Int, List(String), Int), PolylineError) {
+) -> Result(#(Int, Int, BitArray, Int), PolylineError) {
+  use #(lat_delta, after_lat_bytes, after_lat) <- result.try(decode_signed(
+    input: input,
+    bytes: bytes,
+    position: position,
+  ))
+  use #(lng_delta, rest, after_lng) <- result.try(decode_signed(
+    input: input,
+    bytes: after_lat_bytes,
+    position: after_lat,
+  ))
+  Ok(#(lat_delta, lng_delta, rest, after_lng))
+}
+
+fn decode_signed(
+  input input: String,
+  bytes bytes: BitArray,
+  position position: Int,
+) -> Result(#(Int, BitArray, Int), PolylineError) {
   use #(value, rest, after_pos) <- result.try(decode_unsigned(
-    chars: chars,
+    input: input,
+    bytes: bytes,
     position: position,
     shift: 0,
     acc: 0,
@@ -223,83 +248,55 @@ fn decode_signed(
   Ok(#(signed, rest, after_pos))
 }
 
+// Each chunk carries 5 bits. A 32-bit value needs at most seven chunks
+// (shifts 0 to 30); a longer run of continuation chunks is rejected at
+// the chunk that would start beyond bit 32, so both targets agree even
+// on inputs that would exceed the JavaScript safe-integer range.
+const max_shift: Int = 30
+
 fn decode_unsigned(
-  chars chars: List(String),
+  input input: String,
+  bytes bytes: BitArray,
   position position: Int,
   shift shift: Int,
   acc acc: Int,
-) -> Result(#(Int, List(String), Int), PolylineError) {
-  case chars {
-    [] -> Error(TruncatedInput)
-    [head, ..tail] -> {
-      use code <- result.try(grapheme_codepoint(
-        grapheme: head,
-        position: position,
-      ))
-      use <- bool.guard(
-        when: code < 63,
-        return: Error(InvalidCharacter(char: head, position: position)),
-      )
+) -> Result(#(Int, BitArray, Int), PolylineError) {
+  case bytes {
+    <<code, rest:bytes>> if code >= 63 && code <= 126 && shift <= max_shift -> {
       let value = code - 63
-      let chunk = case value < 0x20 {
-        True -> value
-        False -> value - 0x20
-      }
-      let new_acc = acc + chunk * pow_of_two(shift)
       case value < 0x20 {
-        True -> Ok(#(new_acc, tail, position + 1))
+        True ->
+          Ok(#(acc + int.bitwise_shift_left(value, shift), rest, position + 1))
         False ->
           decode_unsigned(
-            chars: tail,
+            input: input,
+            bytes: rest,
             position: position + 1,
             shift: shift + 5,
-            acc: new_acc,
+            acc: acc + int.bitwise_shift_left(value - 0x20, shift),
           )
       }
     }
+    <<_, _:bytes>> ->
+      Error(InvalidCharacter(
+        char: string.slice(input, position, 1),
+        position: position,
+      ))
+    _ -> Error(TruncatedInput)
   }
 }
 
 // --- Helpers -------------------------------------------------------------
 
-fn pow10(exponent: Int) -> Int {
-  use <- bool.guard(when: exponent <= 0, return: 1)
-  10 * pow10(exponent - 1)
-}
-
-fn pow_of_two(exponent: Int) -> Int {
-  use <- bool.guard(when: exponent <= 0, return: 1)
-  2 * pow_of_two(exponent - 1)
+fn scale_factor(precision: Int) -> Float {
+  list.repeat(10, times: precision)
+  |> int.product
+  |> int.to_float
 }
 
 fn round_to_int(value: Float) -> Int {
   use <- bool.guard(when: value <. 0.0, return: -float.round(0.0 -. value))
   float.round(value)
-}
-
-fn int_to_float(value: Int) -> Float {
-  int.to_float(value)
-}
-
-// We pass codepoints around as Ints so the bit / shift / mod
-// arithmetic stays in one place. `grapheme_codepoint` extracts the
-// raw codepoint of an ASCII grapheme; non-ASCII inputs return
-// `InvalidCharacter`.
-fn grapheme_codepoint(
-  grapheme grapheme: String,
-  position position: Int,
-) -> Result(Int, PolylineError) {
-  case string.to_utf_codepoints(grapheme) {
-    [code] -> {
-      let value = string.utf_codepoint_to_int(code)
-      use <- bool.guard(
-        when: value > 127,
-        return: Error(InvalidCharacter(char: grapheme, position: position)),
-      )
-      Ok(value)
-    }
-    _ -> Error(InvalidCharacter(char: grapheme, position: position))
-  }
 }
 
 fn int_codepoint_to_string(value: Int) -> String {
