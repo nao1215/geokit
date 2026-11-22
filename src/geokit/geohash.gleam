@@ -87,79 +87,50 @@ pub fn encode(
     when: precision < 1 || precision > 12,
     return: Error(PrecisionOutOfRange(precision: precision)),
   )
-  let target_bits = precision * 5
   let bits =
     encode_bits(
-      lat_min: -90.0,
-      lat_max: 90.0,
-      lng_min: -180.0,
-      lng_max: 180.0,
-      lat: latlng.lat(point),
-      lng: latlng.lng(point),
-      remaining: target_bits,
-      use_lng: True,
+      current: #(latlng.lng(point), #(-180.0, 180.0)),
+      other: #(latlng.lat(point), #(-90.0, 90.0)),
+      remaining: precision * 5,
       acc: [],
     )
   Ok(bits_to_base32(list.reverse(bits), ""))
 }
 
+// Bits alternate between the axes, longitude first: each step bisects
+// `current` (a coordinate and its interval) and then swaps the axes.
 fn encode_bits(
-  lat_min lat_min: Float,
-  lat_max lat_max: Float,
-  lng_min lng_min: Float,
-  lng_max lng_max: Float,
-  lat lat: Float,
-  lng lng: Float,
+  current current: #(Float, #(Float, Float)),
+  other other: #(Float, #(Float, Float)),
   remaining remaining: Int,
-  use_lng use_lng: Bool,
   acc acc: List(Int),
 ) -> List(Int) {
-  case remaining, use_lng {
-    0, _ -> acc
-    _, True -> {
-      let #(bit, lng_min, lng_max) =
-        bisect(value: lng, min: lng_min, max: lng_max)
+  case remaining {
+    0 -> acc
+    _ -> {
+      let #(value, #(min, max)) = current
+      // The midpoint belongs to the upper half.
+      let bit = case value >=. { min +. max } /. 2.0 {
+        True -> 1
+        False -> 0
+      }
       encode_bits(
-        lat_min:,
-        lat_max:,
-        lng_min:,
-        lng_max:,
-        lat:,
-        lng:,
+        current: other,
+        other: #(value, halve(bit: bit, range: #(min, max))),
         remaining: remaining - 1,
-        use_lng: False,
-        acc: [bit, ..acc],
-      )
-    }
-    _, False -> {
-      let #(bit, lat_min, lat_max) =
-        bisect(value: lat, min: lat_min, max: lat_max)
-      encode_bits(
-        lat_min:,
-        lat_max:,
-        lng_min:,
-        lng_max:,
-        lat:,
-        lng:,
-        remaining: remaining - 1,
-        use_lng: True,
         acc: [bit, ..acc],
       )
     }
   }
 }
 
-// One bisection step: the bit for `value` and the half of
-// `[min, max]` it falls in. The midpoint belongs to the upper half.
-fn bisect(
-  value value: Float,
-  min min: Float,
-  max max: Float,
-) -> #(Int, Float, Float) {
+// The upper half of `range` for bit 1, the lower half for bit 0.
+fn halve(bit bit: Int, range range: #(Float, Float)) -> #(Float, Float) {
+  let #(min, max) = range
   let mid = { min +. max } /. 2.0
-  case value >=. mid {
-    True -> #(1, mid, max)
-    False -> #(0, min, mid)
+  case bit {
+    1 -> #(mid, max)
+    _ -> #(min, mid)
   }
 }
 
@@ -205,15 +176,19 @@ pub fn decode_bounds(
   let normalised = string.lowercase(hash)
   use <- bool.guard(when: normalised == "", return: Error(EmptyHash))
   use bits <- result.try(hash_to_bits(hash: normalised, position: 0, acc: []))
-  let #(lat_min, lat_max, lng_min, lng_max) =
-    decode_bits(
-      bits: list.reverse(bits),
-      lat_min: -90.0,
-      lat_max: 90.0,
-      lng_min: -180.0,
-      lng_max: 180.0,
-      use_lng: True,
-    )
+  let #(last_axis, other_axis) =
+    decode_bits(bits: list.reverse(bits), current: #(-180.0, 180.0), other: #(
+      -90.0,
+      90.0,
+    ))
+  // Each character is 5 bits, so an even-length hash has an even number
+  // of bits and the axes end where they started (longitude current).
+  let #(#(lng_min, lng_max), #(lat_min, lat_max)) = case
+    string.length(normalised) % 2
+  {
+    0 -> #(last_axis, other_axis)
+    _ -> #(other_axis, last_axis)
+  }
   Ok(#(
     latlng.wrap(lat: lat_min, lng: lng_min),
     latlng.wrap(lat: lat_max, lng: lng_max),
@@ -243,47 +218,21 @@ fn hash_to_bits(
   }
 }
 
+// The decoding counterpart of `encode_bits`: each bit halves the
+// interval of `current`, then the axes swap.
 fn decode_bits(
   bits bits: List(Int),
-  lat_min lat_min: Float,
-  lat_max lat_max: Float,
-  lng_min lng_min: Float,
-  lng_max lng_max: Float,
-  use_lng use_lng: Bool,
-) -> #(Float, Float, Float, Float) {
-  case bits, use_lng {
-    [], _ -> #(lat_min, lat_max, lng_min, lng_max)
-    [bit, ..rest], True -> {
-      let #(lng_min, lng_max) = halve(bit: bit, min: lng_min, max: lng_max)
+  current current: #(Float, Float),
+  other other: #(Float, Float),
+) -> #(#(Float, Float), #(Float, Float)) {
+  case bits {
+    [] -> #(current, other)
+    [bit, ..rest] ->
       decode_bits(
         bits: rest,
-        lat_min:,
-        lat_max:,
-        lng_min:,
-        lng_max:,
-        use_lng: False,
+        current: other,
+        other: halve(bit: bit, range: current),
       )
-    }
-    [bit, ..rest], False -> {
-      let #(lat_min, lat_max) = halve(bit: bit, min: lat_min, max: lat_max)
-      decode_bits(
-        bits: rest,
-        lat_min:,
-        lat_max:,
-        lng_min:,
-        lng_max:,
-        use_lng: True,
-      )
-    }
-  }
-}
-
-// The upper half of `[min, max]` for bit 1, the lower half for bit 0.
-fn halve(bit bit: Int, min min: Float, max max: Float) -> #(Float, Float) {
-  let mid = { min +. max } /. 2.0
-  case bit {
-    1 -> #(mid, max)
-    _ -> #(min, mid)
   }
 }
 
