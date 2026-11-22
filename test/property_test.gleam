@@ -216,7 +216,7 @@ pub fn pbt_geohash_encoded_length_equals_precision_test() -> Nil {
 }
 
 fn geohash_length_matches(p: LatLng, prec: Int) -> Bool {
-  case geohash.encode(point: p, precision: prec) {
+  case geohash.encode(p, precision: prec) {
     Ok(hash) -> string.length(hash) == prec
     Error(_) -> False
   }
@@ -229,7 +229,7 @@ pub fn pbt_geohash_alphabet_test() -> Nil {
 }
 
 fn geohash_alphabet_ok(p: LatLng, prec: Int) -> Bool {
-  case geohash.encode(point: p, precision: prec) {
+  case geohash.encode(p, precision: prec) {
     Ok(hash) -> !contains_forbidden_chars(hash)
     Error(_) -> False
   }
@@ -250,14 +250,14 @@ pub fn pbt_geohash_decode_bounds_contains_original_test() -> Nil {
 }
 
 fn geohash_bounds_contain(p: LatLng, prec: Int) -> Bool {
-  case geohash.encode(point: p, precision: prec) {
+  case geohash.encode(p, precision: prec) {
     Error(_) -> False
     Ok(hash) -> check_geohash_bounds(hash, p)
   }
 }
 
 fn check_geohash_bounds(hash: String, p: LatLng) -> Bool {
-  case geohash.decode_bounds(hash: hash) {
+  case geohash_bounds(hash) {
     Error(_) -> False
     Ok(pair) -> bbox_contains(pair.0, pair.1, p)
   }
@@ -277,7 +277,7 @@ pub fn pbt_geohash_case_insensitive_decode_test() -> Nil {
 }
 
 fn geohash_case_agreement(p: LatLng, prec: Int) -> Bool {
-  case geohash.encode(point: p, precision: prec) {
+  case geohash.encode(p, precision: prec) {
     Error(_) -> False
     Ok(hash) -> decode_lower_equals_upper(hash)
   }
@@ -298,17 +298,17 @@ pub fn pbt_geohash_neighbors_preserve_length_test() -> Nil {
 }
 
 fn geohash_neighbors_length_ok(p: LatLng, prec: Int) -> Bool {
-  case geohash.encode(point: p, precision: prec) {
+  case geohash.encode(p, precision: prec) {
     Error(_) -> False
     Ok(hash) -> neighbors_all_length(hash, prec)
   }
 }
 
 fn neighbors_all_length(hash: String, prec: Int) -> Bool {
-  case geohash.neighbors(hash: hash) {
-    // Polar boundaries can return EmptyHash by design — treat as
-    // out-of-scope, not a failure.
-    Error(_) -> True
+  case geohash.neighbors(hash) {
+    // Cells in the polar rows have no neighbor on one side.
+    Error(geohash.NoNeighborBeyondPole) -> True
+    Error(_) -> False
     Ok(n) ->
       string.length(n.north) == prec
       && string.length(n.east) == prec
@@ -324,21 +324,21 @@ pub fn pbt_geohash_east_then_west_round_trip_test() -> Nil {
 }
 
 fn east_west_round_trip_ok(p: LatLng, prec: Int) -> Bool {
-  case geohash.encode(point: p, precision: prec) {
+  case geohash.encode(p, precision: prec) {
     Error(_) -> False
     Ok(start) -> step_east_then_west(start)
   }
 }
 
 fn step_east_then_west(start: String) -> Bool {
-  case geohash.neighbor(hash: start, direction: geohash.East) {
+  case geohash.neighbor(start, toward: geohash.East) {
     Error(_) -> True
     Ok(east) -> step_back_west(east, start)
   }
 }
 
 fn step_back_west(east: String, start: String) -> Bool {
-  case geohash.neighbor(hash: east, direction: geohash.West) {
+  case geohash.neighbor(east, toward: geohash.West) {
     Error(_) -> True
     Ok(back) -> back == start
   }
@@ -354,10 +354,7 @@ pub fn pbt_geohash_precision_prefix_test() -> Nil {
 }
 
 fn geohash_prefix_nests(p: LatLng, n: Int) -> Bool {
-  case
-    geohash.encode(point: p, precision: n),
-    geohash.encode(point: p, precision: n + 1)
-  {
+  case geohash.encode(p, precision: n), geohash.encode(p, precision: n + 1) {
     Ok(short), Ok(long) -> string.starts_with(long, short)
     _, _ -> False
   }
@@ -678,4 +675,11 @@ fn simplify_line(
     Ok(geokit.LineString(simplified)) -> Ok(simplified)
     _ -> Error(Nil)
   }
+}
+
+fn geohash_bounds(
+  hash: String,
+) -> Result(#(LatLng, LatLng), geohash.GeohashError) {
+  geohash.decode_bounds(hash)
+  |> result.map(fn(cell) { #(cell.south_west, cell.north_east) })
 }

@@ -61,9 +61,9 @@ pub fn readme_antimeridian_wrap_test() -> Nil {
 
 pub fn around_tokyo() -> #(String, geokit.LatLng, geohash.Neighbors) {
   let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-  let assert Ok(hash) = geohash.encode(point: tokyo, precision: 8)
-  let assert Ok(centre) = geohash.decode(hash: hash)
-  let assert Ok(neighbours) = geohash.neighbors(hash: hash)
+  let assert Ok(hash) = geohash.encode(tokyo, precision: 8)
+  let assert Ok(centre) = geohash.decode(hash)
+  let assert Ok(neighbours) = geohash.neighbors(hash)
   #(hash, centre, neighbours)
 }
 

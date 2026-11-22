@@ -1,37 +1,32 @@
-//// Niemeyer geohash encoding and decoding.
-////
-//// A geohash is a short alphanumeric string identifying a
-//// rectangular cell on the Earth's surface. Longer hashes pinpoint
-//// smaller cells. The alphabet is base32 (10 digits + 22 letters,
-//// omitting `a`, `i`, `l`, `o` to avoid visual ambiguity); each
-//// character contributes 5 bits, alternating between longitude and
-//// latitude.
-////
-//// See <http://geohash.org/> for the original specification.
+//// Geohash encoding and decoding. A geohash names a rectangular cell
+//// with a string over the alphabet `0123456789bcdefghjkmnpqrstuvwxyz`.
+//// Each character adds 5 bits, alternating between longitude and
+//// latitude, so a longer hash names a smaller cell inside the shorter
+//// one. Decoding is case-insensitive.
 
 import gleam/bool
 import gleam/list
 import gleam/result
 import gleam/string
 
-import geokit.{type LatLng}
+import geokit.{type BoundingBox, type LatLng, BoundingBox}
 
 const base32_alphabet: String = "0123456789bcdefghjkmnpqrstuvwxyz"
 
-/// Errors returned by [`encode`](#encode), [`decode`](#decode),
-/// [`decode_bounds`](#decode_bounds), and [`neighbor`](#neighbor).
+/// The reason a geohash operation failed.
 pub type GeohashError {
-  /// [`encode`](#encode) was called with `precision` outside the
-  /// supported range `[1, 12]`.
+  /// The precision was outside [1, 12].
   PrecisionOutOfRange(precision: Int)
-  /// [`decode`](#decode) was called with an empty string.
+  /// The hash was the empty string.
   EmptyHash
-  /// A character outside the base32 alphabet appeared in a hash
-  /// passed to [`decode`](#decode).
-  InvalidCharacter(char: String, position: Int)
+  /// A character outside the geohash alphabet, at a 0-based position.
+  InvalidCharacter(character: String, position: Int)
+  /// A step north of the northernmost row or south of the southernmost
+  /// row was asked for.
+  NoNeighborBeyondPole
 }
 
-/// Compass direction used by [`neighbor`](#neighbor).
+/// A direction for [`neighbor`](#neighbor).
 pub type Direction {
   North
   South
@@ -43,7 +38,8 @@ pub type Direction {
   SouthWest
 }
 
-/// The eight neighbours of a geohash cell. See [`neighbors`](#neighbors).
+/// The eight cells around a geohash cell, as returned by
+/// [`neighbors`](#neighbors).
 pub type Neighbors {
   Neighbors(
     north: String,
@@ -59,28 +55,24 @@ pub type Neighbors {
 
 // --- Encode --------------------------------------------------------------
 
-/// Encode a [`LatLng`](../latlng.html#LatLng) as a base32 geohash of
-/// the requested precision. Precision is the number of output
-/// characters and must be in `[1, 12]`. Each additional character
-/// shrinks the cell width by a factor of ~5.6.
+/// Returns the geohash of the cell that contains `point`. `precision` is
+/// the number of characters, in [1, 12]. A point exactly on a cell edge
+/// belongs to the cell to its north or east.
 ///
-/// Midpoint inputs (the equator, the poles, the prime / anti
-/// meridian, and other coordinates that land exactly on a recursive
-/// bisection midpoint) follow the canonical Wikipedia / `ngeohash` /
-/// `pygeohash` / `geohash.org` convention: `coordinate >= midpoint`
-/// places the bit in the upper half. This makes geokit-emitted
-/// hashes byte-compatible with every other geohash implementation.
+/// ## Examples
 ///
 /// ```gleam
-/// import geokit/geohash
-/// import geokit/latlng
+/// let tokyo = geokit.wrap_lat_lng(latitude: 35.6812, longitude: 139.7671)
+/// encode(tokyo, precision: 8)
+/// // -> Ok("xn76urx6")
+/// ```
 ///
-/// let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-/// let assert Ok(hash) = geohash.encode(point: tokyo, precision: 8)
-/// // hash == "xn76urx4"
+/// ```gleam
+/// encode(tokyo, precision: 13)
+/// // -> Error(PrecisionOutOfRange(precision: 13))
 /// ```
 pub fn encode(
-  point point: LatLng,
+  point: LatLng,
   precision precision: Int,
 ) -> Result(String, GeohashError) {
   use <- bool.guard(
@@ -146,36 +138,51 @@ fn bits_to_base32(bits: List(Int), acc: String) -> String {
 
 // --- Decode --------------------------------------------------------------
 
-/// Decode a geohash to the centre of the cell it identifies.
+/// Returns the center of the cell named by `hash`.
 ///
-/// The input is case-insensitive: upper-case characters are folded
-/// to lower-case before lookup.
+/// ## Examples
 ///
 /// ```gleam
-/// import geokit/geohash
-///
-/// let assert Ok(centre) = geohash.decode("xn76urx4")
-/// // centre ≈ (35.6812, 139.7671)
+/// decode("xn76urx6")
+/// |> result.map(fn(center) {
+///   #(geokit.latitude(center), geokit.longitude(center))
+/// })
+/// // -> Ok(#(35.68127632141113, 139.76720809936523))
 /// ```
-pub fn decode(hash hash: String) -> Result(LatLng, GeohashError) {
-  use #(sw, ne) <- result.try(decode_bounds(hash: hash))
+///
+/// ```gleam
+/// decode("xn7a")
+/// // -> Error(InvalidCharacter(character: "a", position: 3))
+/// ```
+pub fn decode(hash: String) -> Result(LatLng, GeohashError) {
+  use BoundingBox(south_west: sw, north_east: ne) <- result.try(decode_bounds(
+    hash,
+  ))
   let lat = { geokit.latitude(sw) +. geokit.latitude(ne) } /. 2.0
   let lng = { geokit.longitude(sw) +. geokit.longitude(ne) } /. 2.0
   Ok(geokit.wrap_lat_lng(latitude: lat, longitude: lng))
 }
 
-/// Decode a geohash to the south-west and north-east corners of its
-/// cell, returned as a tuple `#(sw, ne)`.
+/// Returns the cell named by `hash`.
 ///
-/// The input is case-insensitive: upper-case characters are folded to
-/// lower-case before lookup. This matches `chrisveness/latlon-geohash`
-/// and `ngeohash`.
-pub fn decode_bounds(
-  hash hash: String,
-) -> Result(#(LatLng, LatLng), GeohashError) {
-  let normalised = string.lowercase(hash)
-  use <- bool.guard(when: normalised == "", return: Error(EmptyHash))
-  use bits <- result.try(hash_to_bits(hash: normalised, position: 0, acc: []))
+/// ## Examples
+///
+/// ```gleam
+/// decode_bounds("xn")
+/// |> result.map(fn(cell) {
+///   #(geokit.latitude(cell.south_west), geokit.longitude(cell.north_east))
+/// })
+/// // -> Ok(#(33.75, 146.25))
+/// ```
+///
+/// ```gleam
+/// decode_bounds("")
+/// // -> Error(EmptyHash)
+/// ```
+pub fn decode_bounds(hash: String) -> Result(BoundingBox, GeohashError) {
+  let lowered = string.lowercase(hash)
+  use <- bool.guard(when: lowered == "", return: Error(EmptyHash))
+  use bits <- result.try(hash_to_bits(hash: lowered, position: 0, acc: []))
   let #(last_axis, other_axis) =
     decode_bits(bits: list.reverse(bits), current: #(-180.0, 180.0), other: #(
       -90.0,
@@ -184,14 +191,14 @@ pub fn decode_bounds(
   // Each character is 5 bits, so an even-length hash has an even number
   // of bits and the axes end where they started (longitude current).
   let #(#(lng_min, lng_max), #(lat_min, lat_max)) = case
-    string.length(normalised) % 2
+    string.length(lowered) % 2
   {
     0 -> #(last_axis, other_axis)
     _ -> #(other_axis, last_axis)
   }
-  Ok(#(
-    geokit.wrap_lat_lng(latitude: lat_min, longitude: lng_min),
-    geokit.wrap_lat_lng(latitude: lat_max, longitude: lng_max),
+  Ok(BoundingBox(
+    south_west: geokit.wrap_lat_lng(latitude: lat_min, longitude: lng_min),
+    north_east: geokit.wrap_lat_lng(latitude: lat_max, longitude: lng_max),
   ))
 }
 
@@ -204,7 +211,8 @@ fn hash_to_bits(
     Error(Nil) -> Ok(acc)
     Ok(#(head, tail)) ->
       case index_of(char: head, table: base32_alphabet) {
-        Error(Nil) -> Error(InvalidCharacter(char: head, position: position))
+        Error(Nil) ->
+          Error(InvalidCharacter(character: head, position: position))
         Ok(value) ->
           hash_to_bits(hash: tail, position: position + 1, acc: [
             value % 2,
@@ -242,48 +250,67 @@ fn index_of(char char: String, table table: String) -> Result(Int, Nil) {
   string.length(before)
 }
 
-// --- Neighbours ----------------------------------------------------------
+// --- Neighbors -----------------------------------------------------------
 
-/// The neighbour of `hash` in the given [`Direction`](#Direction).
+/// Returns the cell next to `hash` in the given direction, at the same
+/// precision. East and west wrap across the antimeridian. Returns
+/// `Error(NoNeighborBeyondPole)` for a step past a pole, and
+/// `Error(EmptyHash)` or `Error(InvalidCharacter(..))` for a bad hash.
 ///
-/// Returns [`EmptyHash`](#GeohashError) when called on the empty
-/// string. Wraps across the antimeridian for east / west, returns
-/// [`EmptyHash`](#GeohashError) when a polar neighbour would cross
-/// the pole (north of the northernmost row or south of the
-/// southernmost row).
+/// ## Examples
 ///
-/// The input is case-insensitive: upper-case characters are folded
-/// to lower-case before lookup, matching `chrisveness/latlon-geohash`
-/// and `ngeohash`.
+/// ```gleam
+/// neighbor("xn76urx6", toward: North)
+/// // -> Ok("xn76urx7")
+/// ```
+///
+/// ```gleam
+/// neighbor("b", toward: North)
+/// // -> Error(NoNeighborBeyondPole)
+/// ```
 pub fn neighbor(
-  hash hash: String,
-  direction direction: Direction,
+  hash: String,
+  toward direction: Direction,
 ) -> Result(String, GeohashError) {
-  let normalised = string.lowercase(hash)
-  use _ <- result.try(hash_to_bits(hash: normalised, position: 0, acc: []))
+  let lowered = string.lowercase(hash)
+  use _ <- result.try(hash_to_bits(hash: lowered, position: 0, acc: []))
   case direction {
-    North -> step(hash: normalised, toward: ToNorth)
-    South -> step(hash: normalised, toward: ToSouth)
-    East -> step(hash: normalised, toward: ToEast)
-    West -> step(hash: normalised, toward: ToWest)
-    NorthEast -> two_steps(hash: normalised, first: ToNorth, second: ToEast)
-    NorthWest -> two_steps(hash: normalised, first: ToNorth, second: ToWest)
-    SouthEast -> two_steps(hash: normalised, first: ToSouth, second: ToEast)
-    SouthWest -> two_steps(hash: normalised, first: ToSouth, second: ToWest)
+    North -> step(hash: lowered, toward: ToNorth)
+    South -> step(hash: lowered, toward: ToSouth)
+    East -> step(hash: lowered, toward: ToEast)
+    West -> step(hash: lowered, toward: ToWest)
+    NorthEast -> two_steps(hash: lowered, first: ToNorth, second: ToEast)
+    NorthWest -> two_steps(hash: lowered, first: ToNorth, second: ToWest)
+    SouthEast -> two_steps(hash: lowered, first: ToSouth, second: ToEast)
+    SouthWest -> two_steps(hash: lowered, first: ToSouth, second: ToWest)
   }
 }
 
-/// All eight neighbours of `hash`, returned as a
-/// [`Neighbors`](#Neighbors) record.
-pub fn neighbors(hash hash: String) -> Result(Neighbors, GeohashError) {
-  use n <- result.try(neighbor(hash: hash, direction: North))
-  use s <- result.try(neighbor(hash: hash, direction: South))
-  use e <- result.try(neighbor(hash: hash, direction: East))
-  use w <- result.try(neighbor(hash: hash, direction: West))
-  use ne <- result.try(neighbor(hash: hash, direction: NorthEast))
-  use nw <- result.try(neighbor(hash: hash, direction: NorthWest))
-  use se <- result.try(neighbor(hash: hash, direction: SouthEast))
-  use sw <- result.try(neighbor(hash: hash, direction: SouthWest))
+/// Returns the eight cells around `hash`. A cell in the northernmost or
+/// southernmost row has no cell on one side, so the result is
+/// `Error(NoNeighborBeyondPole)` there. Use [`neighbor`](#neighbor) to
+/// get the cells that do exist.
+///
+/// ## Examples
+///
+/// ```gleam
+/// neighbors("xn76urx6") |> result.map(fn(cells) { cells.east })
+/// // -> Ok("xn76urxd")
+/// ```
+///
+/// ```gleam
+/// neighbors("b")
+/// // -> Error(NoNeighborBeyondPole)
+/// ```
+pub fn neighbors(hash: String) -> Result(Neighbors, GeohashError) {
+  use n <- result.try(neighbor(hash, toward: North))
+  use s <- result.try(neighbor(hash, toward: South))
+  use e <- result.try(neighbor(hash, toward: East))
+  use w <- result.try(neighbor(hash, toward: West))
+  use ne <- result.try(neighbor(hash, toward: NorthEast))
+  use nw <- result.try(neighbor(hash, toward: NorthWest))
+  use se <- result.try(neighbor(hash, toward: SouthEast))
+  use sw <- result.try(neighbor(hash, toward: SouthWest))
   Ok(Neighbors(
     north: n,
     south: s,
@@ -333,30 +360,33 @@ fn step(
         // Crossing the antimeridian: the top-level cell wraps around,
         // so the last character is looked up in the table as is.
         True, "" if toward == ToEast || toward == ToWest -> Ok("")
-        // Crossing a pole has no neighbour.
-        True, "" -> Error(EmptyHash)
+        // Crossing a pole has no neighbor.
+        True, "" -> Error(NoNeighborBeyondPole)
         True, _ -> step(hash: parent, toward: toward)
       })
       // The Niemeyer adjacency tables are keyed *by position within
-      // the neighbour string*: find the position of `last` in the
-      // neighbour table, and that position indexes the base32
+      // the neighbor string*: find the position of `last` in the
+      // neighbor table, and that position indexes the base32
       // alphabet to give the new character. (Not: find the base32
-      // index of `last`, look up that position in the neighbour table
+      // index of `last`, look up that position in the neighbor table
       // — which is the easy mistake.)
       case index_of(char: last, table: lookup) {
         Error(Nil) ->
-          Error(InvalidCharacter(char: last, position: string.length(parent)))
+          Error(InvalidCharacter(
+            character: last,
+            position: string.length(parent),
+          ))
         Ok(value) -> Ok(new_parent <> string.slice(base32_alphabet, value, 1))
       }
     }
   }
 }
 
-// Adjacency tables (Niemeyer): `#(neighbour, border)` for a direction
+// Adjacency tables (Niemeyer): `#(neighbor, border)` for a direction
 // and the parity of the hash length. `border` lists the characters
 // that, as the last character of a hash, lie on the edge of the parent
-// cell in that direction; the neighbour is then computed from the
-// parent's neighbour.
+// cell in that direction; the neighbor is then computed from the
+// parent's neighbor.
 fn tables(toward toward: Cardinal, is_even is_even: Bool) -> #(String, String) {
   case toward, is_even {
     ToNorth, True -> #("p0r21436x8zb9dcf5h7kjnmqesgutwvy", "prxz")

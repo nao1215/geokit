@@ -220,25 +220,25 @@ pub fn diff_bearing_antipodes_no_crash_test() -> Nil {
 
 pub fn diff_geohash_encode_tokyo_p5_test() -> Nil {
   let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-  let assert Ok(hash) = geohash.encode(point: p, precision: 5)
+  let assert Ok(hash) = geohash.encode(p, precision: 5)
   hash |> should.equal("xn76u")
 }
 
 pub fn diff_geohash_encode_tokyo_p7_test() -> Nil {
   let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-  let assert Ok(hash) = geohash.encode(point: p, precision: 7)
+  let assert Ok(hash) = geohash.encode(p, precision: 7)
   hash |> should.equal("xn76urx")
 }
 
 pub fn diff_geohash_encode_tokyo_p9_test() -> Nil {
   let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-  let assert Ok(hash) = geohash.encode(point: p, precision: 9)
+  let assert Ok(hash) = geohash.encode(p, precision: 9)
   hash |> should.equal("xn76urx61")
 }
 
 pub fn diff_geohash_encode_osaka_p5_test() -> Nil {
   let assert Ok(p) = geokit.lat_lng(latitude: 34.6937, longitude: 135.5023)
-  let assert Ok(hash) = geohash.encode(point: p, precision: 5)
+  let assert Ok(hash) = geohash.encode(p, precision: 5)
   hash |> should.equal("xn0m7")
 }
 
@@ -247,48 +247,48 @@ pub fn diff_geohash_encode_equator_p5_test() -> Nil {
   // value for the origin is "s0000". The previous "7zzzz" was the
   // pre-fix output from a strict `>` midpoint comparison.
   let assert Ok(p) = geokit.lat_lng(latitude: 0.0, longitude: 0.0)
-  let assert Ok(hash) = geohash.encode(point: p, precision: 5)
+  let assert Ok(hash) = geohash.encode(p, precision: 5)
   hash |> should.equal("s0000")
 }
 
 pub fn diff_geohash_encode_antimeridian_p5_test() -> Nil {
   // Issue #31: ngeohash output for (0, 180) is "xbpbp".
   let assert Ok(p) = geokit.lat_lng(latitude: 0.0, longitude: 180.0)
-  let assert Ok(hash) = geohash.encode(point: p, precision: 5)
+  let assert Ok(hash) = geohash.encode(p, precision: 5)
   hash |> should.equal("xbpbp")
 }
 
 pub fn diff_geohash_encode_north_pole_p5_test() -> Nil {
   // Issue #31: ngeohash output for (90, 0) is "upbpb".
   let assert Ok(p) = geokit.lat_lng(latitude: 90.0, longitude: 0.0)
-  let assert Ok(hash) = geohash.encode(point: p, precision: 5)
+  let assert Ok(hash) = geohash.encode(p, precision: 5)
   hash |> should.equal("upbpb")
 }
 
 pub fn diff_geohash_encode_south_pole_p5_test() -> Nil {
   // Issue #31: ngeohash output for (-90, 0) is "h0000".
   let assert Ok(p) = geokit.lat_lng(latitude: -90.0, longitude: 0.0)
-  let assert Ok(hash) = geohash.encode(point: p, precision: 5)
+  let assert Ok(hash) = geohash.encode(p, precision: 5)
   hash |> should.equal("h0000")
 }
 
 pub fn diff_geohash_encode_p1_tokyo_test() -> Nil {
   let assert Ok(p) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-  let assert Ok(hash) = geohash.encode(point: p, precision: 1)
+  let assert Ok(hash) = geohash.encode(p, precision: 1)
   hash |> should.equal("x")
 }
 
 pub fn diff_geohash_encode_se_corner_world_test() -> Nil {
   // ngeohash.encode(-89.99, 179.99, 5) = "pbpbp"
   let assert Ok(p) = geokit.lat_lng(latitude: -89.99, longitude: 179.99)
-  let assert Ok(hash) = geohash.encode(point: p, precision: 5)
+  let assert Ok(hash) = geohash.encode(p, precision: 5)
   hash |> should.equal("pbpbp")
 }
 
 pub fn diff_geohash_encode_p1_top_right_test() -> Nil {
   // ngeohash.encode(89, 179, 1) = "z" — last cell of the world.
   let assert Ok(p) = geokit.lat_lng(latitude: 89.0, longitude: 179.0)
-  let assert Ok(hash) = geohash.encode(point: p, precision: 1)
+  let assert Ok(hash) = geohash.encode(p, precision: 1)
   hash |> should.equal("z")
 }
 
@@ -296,7 +296,7 @@ pub fn diff_geohash_encode_p1_top_right_test() -> Nil {
 
 pub fn diff_geohash_decode_bounds_tokyo_p5_test() -> Nil {
   // ngeohash.decode_bbox("xn76u") = [35.639648, 139.746094, 35.683594, 139.790039]
-  let assert Ok(#(sw, ne)) = geohash.decode_bounds(hash: "xn76u")
+  let assert Ok(#(sw, ne)) = geohash_bounds("xn76u")
   approx(geokit.latitude(sw), 35.639_648, 0.000_001)
   |> should.be_true
   approx(geokit.longitude(sw), 139.746_094, 0.000_001)
@@ -309,7 +309,7 @@ pub fn diff_geohash_decode_bounds_tokyo_p5_test() -> Nil {
 
 pub fn diff_geohash_decode_bounds_tokyo_p9_test() -> Nil {
   // ngeohash.decode_bbox("xn76urx61") = [35.681190, 139.767079, 35.681233, 139.767122]
-  let assert Ok(#(sw, ne)) = geohash.decode_bounds(hash: "xn76urx61")
+  let assert Ok(#(sw, ne)) = geohash_bounds("xn76urx61")
   approx(geokit.latitude(sw), 35.681_19, 0.000_001)
   |> should.be_true
   approx(geokit.latitude(ne), 35.681_233, 0.000_001)
@@ -321,7 +321,7 @@ pub fn diff_geohash_decode_bounds_tokyo_p9_test() -> Nil {
 pub fn diff_geohash_neighbors_tokyo_p5_test() -> Nil {
   // ngeohash.neighbors("xn76u") [N, NE, E, SE, S, SW, W, NW]
   //   = ["xn77h","xn77j","xn76v","xn76t","xn76s","xn76e","xn76g","xn775"]
-  let assert Ok(ns) = geohash.neighbors(hash: "xn76u")
+  let assert Ok(ns) = geohash.neighbors("xn76u")
   ns.north |> should.equal("xn77h")
   ns.north_east |> should.equal("xn77j")
   ns.east |> should.equal("xn76v")
@@ -334,25 +334,25 @@ pub fn diff_geohash_neighbors_tokyo_p5_test() -> Nil {
 
 pub fn diff_geohash_neighbors_origin_p5_test() -> Nil {
   // ngeohash: north of "7zzzz" = "ebpbp"
-  let assert Ok(ns) = geohash.neighbors(hash: "7zzzz")
+  let assert Ok(ns) = geohash.neighbors("7zzzz")
   ns.north |> should.equal("ebpbp")
 }
 
 // --- Polar neighbour convention (documented divergence from ngeohash) --
 
-pub fn diff_geohash_north_of_north_pole_returns_empty_test() -> Nil {
-  // Documented geokit behaviour: returns `Error(EmptyHash)` when a
-  // polar neighbour would cross the pole. (ngeohash returns the
-  // hash unchanged; geokit chooses the error path.)
-  case geohash.neighbor(hash: "gzzzz", direction: geohash.North) {
-    Error(geohash.EmptyHash) -> Nil
+pub fn diff_geohash_north_of_north_pole_has_no_neighbor_test() -> Nil {
+  // geokit returns `Error(NoNeighborBeyondPole)` when a polar neighbor
+  // would cross the pole. (ngeohash returns the hash unchanged; geokit
+  // chooses the error path.)
+  case geohash.neighbor("gzzzz", toward: geohash.North) {
+    Error(geohash.NoNeighborBeyondPole) -> Nil
     _ -> should.be_true(False)
   }
 }
 
-pub fn diff_geohash_south_of_south_pole_returns_empty_test() -> Nil {
-  case geohash.neighbor(hash: "5bpbp", direction: geohash.South) {
-    Error(geohash.EmptyHash) -> Nil
+pub fn diff_geohash_south_of_south_pole_has_no_neighbor_test() -> Nil {
+  case geohash.neighbor("5bpbp", toward: geohash.South) {
+    Error(geohash.NoNeighborBeyondPole) -> Nil
     _ -> should.be_true(False)
   }
 }
@@ -362,28 +362,28 @@ pub fn diff_geohash_south_of_south_pole_returns_empty_test() -> Nil {
 pub fn diff_geohash_decode_rejects_a_test() -> Nil {
   // 'a' is excluded from the Niemeyer alphabet (along with i, l, o).
   case geohash.decode("0a0") {
-    Error(geohash.InvalidCharacter(char: "a", position: 1)) -> Nil
+    Error(geohash.InvalidCharacter(character: "a", position: 1)) -> Nil
     _ -> should.be_true(False)
   }
 }
 
 pub fn diff_geohash_decode_rejects_i_test() -> Nil {
   case geohash.decode("0i0") {
-    Error(geohash.InvalidCharacter(char: "i", position: 1)) -> Nil
+    Error(geohash.InvalidCharacter(character: "i", position: 1)) -> Nil
     _ -> should.be_true(False)
   }
 }
 
 pub fn diff_geohash_decode_rejects_l_test() -> Nil {
   case geohash.decode("0l0") {
-    Error(geohash.InvalidCharacter(char: "l", position: 1)) -> Nil
+    Error(geohash.InvalidCharacter(character: "l", position: 1)) -> Nil
     _ -> should.be_true(False)
   }
 }
 
 pub fn diff_geohash_decode_rejects_o_test() -> Nil {
   case geohash.decode("0o0") {
-    Error(geohash.InvalidCharacter(char: "o", position: 1)) -> Nil
+    Error(geohash.InvalidCharacter(character: "o", position: 1)) -> Nil
     _ -> should.be_true(False)
   }
 }
@@ -391,7 +391,7 @@ pub fn diff_geohash_decode_rejects_o_test() -> Nil {
 pub fn diff_geohash_max_precision_round_trip_test() -> Nil {
   // Precision 12 is the geokit-supported maximum.
   let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
-  let assert Ok(hash) = geohash.encode(point: tokyo, precision: 12)
+  let assert Ok(hash) = geohash.encode(tokyo, precision: 12)
   let assert Ok(centre) = geohash.decode(hash)
   approx(geokit.latitude(centre), 35.6812, 0.000_001)
   |> should.be_true
@@ -790,4 +790,11 @@ fn simplify_line(
     Ok(geokit.LineString(simplified)) -> Ok(simplified)
     _ -> Error(Nil)
   }
+}
+
+fn geohash_bounds(
+  hash: String,
+) -> Result(#(LatLng, LatLng), geohash.GeohashError) {
+  geohash.decode_bounds(hash)
+  |> result.map(fn(cell) { #(cell.south_west, cell.north_east) })
 }
