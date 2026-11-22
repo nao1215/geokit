@@ -130,11 +130,81 @@ fn simplify_rings(
   case rings {
     [] -> Ok(list.reverse(acc))
     [head, ..tail] -> {
-      use simplified <- result.try(line_string(
-        points: head,
-        tolerance: tolerance,
-      ))
+      use simplified <- result.try(ring(points: head, tolerance: tolerance))
       simplify_rings(rings: tail, tolerance: tolerance, acc: [simplified, ..acc])
+    }
+  }
+}
+
+// A closed ring starts and ends at the same vertex, so Douglas-Peucker
+// over the whole ring would measure every point against a zero-length
+// chord and could keep only the closing pair. Split at the vertex
+// farthest from the start instead, simplify both halves and rejoin. A
+// result with fewer than four positions is not a valid ring, so the
+// original ring is kept in that case. Unclosed rings are simplified as
+// a line.
+fn ring(
+  points points: List(LatLng),
+  tolerance tolerance: Float,
+) -> Result(List(LatLng), SimplifyError) {
+  case points, list.last(points) {
+    [first, second, third, fourth, ..more], Ok(last) ->
+      case latlng.equal(first, last) {
+        True ->
+          Ok(closed_ring(
+            ring: points,
+            first: first,
+            rest: [second, third, fourth, ..more],
+            tolerance: tolerance,
+          ))
+        False -> line_string(points: points, tolerance: tolerance)
+      }
+    _, _ -> line_string(points: points, tolerance: tolerance)
+  }
+}
+
+fn closed_ring(
+  ring ring: List(LatLng),
+  first first: LatLng,
+  rest rest: List(LatLng),
+  tolerance tolerance: Float,
+) -> List(LatLng) {
+  case farthest_from(origin: first, points: rest) {
+    Error(Nil) -> ring
+    Ok(#(before, pivot, after)) -> {
+      let left =
+        dp(
+          first: first,
+          rest: list.reverse([pivot, ..before]),
+          tolerance: tolerance,
+        )
+      let right = dp(first: pivot, rest: after, tolerance: tolerance)
+      let joined = list.append(left, list.drop(right, 1))
+      case list.length(joined) < 4 {
+        True -> ring
+        False -> joined
+      }
+    }
+  }
+}
+
+// The point of `points` farthest from `origin` (the earliest one on
+// ties), with the points before it (reversed) and after it.
+fn farthest_from(
+  origin origin: LatLng,
+  points points: List(LatLng),
+) -> Result(#(List(LatLng), LatLng, List(LatLng)), Nil) {
+  case points {
+    [] -> Error(Nil)
+    [head, ..tail] -> {
+      let #(_, before, pivot, after) =
+        farthest_loop(points: tail, a: origin, b: origin, seen: [head], best: #(
+          perpendicular_distance(p: head, a: origin, b: origin),
+          [],
+          head,
+          tail,
+        ))
+      Ok(#(before, pivot, after))
     }
   }
 }

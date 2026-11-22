@@ -2,6 +2,7 @@ import gleam/int
 import gleam/list
 import gleeunit/should
 
+import geokit/geojson
 import geokit/geometry
 import geokit/latlng
 import geokit/simplify
@@ -264,4 +265,67 @@ fn random_walk(n: Int) -> List(latlng.LatLng) {
       #(seed, lat, lng, [latlng.wrap(lat: lat, lng: lng), ..points])
     })
   list.reverse(points)
+}
+
+// --- closed polygon rings -------------------------------------------------
+
+fn ll(lat: Float, lng: Float) -> latlng.LatLng {
+  latlng.new_or_panic(lat: lat, lng: lng)
+}
+
+pub fn compute_polygon_keeps_ring_valid_test() -> Nil {
+  // A square with a collinear point in the middle of every side. The
+  // ring starts and ends at the same vertex, so plain Douglas-Peucker
+  // over it measures every point against a zero-length chord.
+  let ring = [
+    ll(0.0, 0.0),
+    ll(0.0, 5.0),
+    ll(0.0, 10.0),
+    ll(5.0, 10.0),
+    ll(10.0, 10.0),
+    ll(10.0, 5.0),
+    ll(10.0, 0.0),
+    ll(5.0, 0.0),
+    ll(0.0, 0.0),
+  ]
+  let assert Ok(simplified) =
+    simplify.compute(geometry: geometry.Polygon([ring]), tolerance: 1.0)
+  simplified
+  |> should.equal(
+    geometry.Polygon([
+      [
+        ll(0.0, 0.0),
+        ll(0.0, 10.0),
+        ll(10.0, 10.0),
+        ll(10.0, 0.0),
+        ll(0.0, 0.0),
+      ],
+    ]),
+  )
+  geojson.encode_geometry(geometry: simplified)
+  |> geojson.decode_geometry
+  |> should.equal(Ok(simplified))
+}
+
+pub fn compute_polygon_keeps_original_when_ring_would_collapse_test() -> Nil {
+  // At a tolerance larger than the square, both halves reduce to their
+  // endpoints and only three positions would remain, which is not a
+  // valid ring, so the original ring is kept.
+  let ring = [
+    ll(0.0, 0.0),
+    ll(0.0, 10.0),
+    ll(10.0, 10.0),
+    ll(10.0, 0.0),
+    ll(0.0, 0.0),
+  ]
+  let assert Ok(simplified) =
+    simplify.compute(
+      geometry: geometry.MultiPolygon([[ring]]),
+      tolerance: 100.0,
+    )
+  simplified
+  |> should.equal(geometry.MultiPolygon([[ring]]))
+  geojson.encode_geometry(geometry: simplified)
+  |> geojson.decode_geometry
+  |> should.equal(Ok(simplified))
 }
