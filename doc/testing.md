@@ -4,11 +4,11 @@
 
 ## Examples and unit tests
 
-Each module has a `test/<module>_test.gleam` with fixed inputs and expected outputs, including the documented edge cases (poles, the antimeridian, empty inputs, invalid hashes and polylines). `test/readme_test.gleam` runs the README snippets. Fixed bugs keep their reproduction in a `test/regression_*_test.gleam` file.
+`test/geokit_test.gleam` and one test file per encoding module hold fixed inputs and expected outputs, including the documented edge cases (poles, the antimeridian, empty inputs, invalid hashes and polylines). `test/readme_test.gleam` runs the README examples. Fixed bugs keep their reproduction in a `test/regression_*_test.gleam` file.
 
 ## Generated properties
 
-`test/property_test.gleam` and `test/point_in_polygon_property_test.gleam` use metamon: distance is non-negative, symmetric and obeys the triangle inequality; bearings stay in [0, 360); geohash prefixes, alphabet, bounds and neighbours; polyline round trips at precision 5 and 6; Web Mercator tiles contain their point and quadkeys round-trip; bbox, centroid and simplify are order-invariant and keep endpoints; point-in-polygon agrees with closed-form oracles for rectangles with holes and diamonds.
+`test/property_test.gleam` and `test/point_in_polygon_property_test.gleam` use metamon: distance is non-negative, symmetric and obeys the triangle inequality; bearings stay in [0, 360); geohash prefixes, alphabet, bounds and neighbors; polyline round trips at precision 5 and 6; Web Mercator tiles contain their point and quadkeys round-trip; bbox, centroid and simplify are order-invariant and keep endpoints; point-in-polygon agrees with closed-form oracles for rectangles with holes and diamonds.
 
 ## Metamorphic relations
 
@@ -36,6 +36,6 @@ There is no mutation testing tool for Gleam, so `gleam_mutate.py` (from the muta
 |---|---|---:|---:|---:|
 | 2026-11-19 | every module under `src/` | 79 | 13 | 85.9% |
 
-The first run scored 68/92 (73.9%). Every simplify test started its segment at the origin, so `x2 -. x1` and `x2 +. x1` gave the same distance; a diagonal segment and a closed line away from the origin now kill those six mutants. Tile coordinates were never negative in a test and `from_lat_lng` was never given an invalid zoom, an open GeoJSON ring always differed in both coordinates, and no test passed a zero tolerance to `simplify.compute`; tests for each now exist.
+The first run scored 68/92 (73.9%). Every simplify test started its segment at the origin, so `x2 -. x1` and `x2 +. x1` gave the same distance; a diagonal segment and a closed line away from the origin now kill those six mutants. Tile coordinates were never negative in a test and `from_lat_lng` was never given an invalid zoom, an open GeoJSON ring always differed in both coordinates, and no test passed a zero tolerance to `simplify`; tests for each now exist.
 
-The 13 survivors are boundary comparisons where `<.` and `<=.` give the same result at the boundary value (`wrap_longitude` at exactly ±180, `sqrt_nonneg` of 0, the absolute value of 0, the minimum in `bbox`, bearing normalisation at 0, rounding of -0 in `polyline`), and point-in-polygon edge tests where an endpoint lies on two edges, so the other edge still reports it.
+The 13 survivors are boundary comparisons where `<.` and `<=.` give the same result at the boundary value (`wrap_longitude` at exactly ±180, `sqrt_nonneg` of 0, the absolute value of 0, the minimum in the bounding box, bearing normalization at 0, rounding of -0 in `polyline`), and point-in-polygon edge tests where an endpoint lies on two edges, so the other edge still reports it.

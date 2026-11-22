@@ -1,6 +1,6 @@
 name = "geokit"
 version = "0.8.0"
-description = "Spherical-earth math, location encodings, and geometry operations for Gleam: haversine, bearing, geohash, polyline, Web Mercator, bbox / centroid / simplify / point-in-polygon."
+description = "Distance, bearing, geohash, encoded polylines, Web Mercator tiles, GeoJSON and planar geometry for Gleam."
 licences = ["MIT"]
 repository = { type = "github", user = "nao1215", repo = "geokit" }
 links = [
@@ -10,7 +10,7 @@ links = [
 gleam = ">= 1.14.0"
 
 [dependencies]
-gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+gleam_stdlib = ">= 0.51.0 and < 2.0.0"
 gleam_community_maths = ">= 2.0.0 and < 3.0.0"
 gleam_json = ">= 3.0.0 and < 4.0.0"
 
@@ -35,8 +35,10 @@ echo = "error"
 error_context_lost = "error"
 ffi_usage = "error"
 function_complexity = "error"
-label_possible = "error"
-missing_labels = "error"
+# Off: a subject argument is unlabelled and labels are kept for the
+# arguments that read as a sentence (from/to, precision, tolerance).
+label_possible = "off"
+missing_labels = "off"
 missing_type_annotation = "error"
 module_complexity = "error"
 panic_without_message = "error"
@@ -59,23 +61,14 @@ unwrap_used = "error"
 [tools.glinter.ignore]
 "test/**/*.gleam" = [
   "assert_ok_pattern",
-  "label_possible",
   "missing_type_annotation",
   "short_variable_name",
   "thrown_away_error",
   "unused_exports",
 ]
-# Geo math modules use conventional short names (a, c, p, x, y, n, k, r)
-"src/geokit/distance.gleam" = ["short_variable_name"]
-"src/geokit/bearing.gleam" = ["short_variable_name"]
+# Geo math uses conventional short names (a, b, x, y, h, n)
+"src/geokit.gleam" = ["short_variable_name"]
+"src/geokit/internal/*.gleam" = ["short_variable_name"]
 "src/geokit/geohash.gleam" = ["short_variable_name"]
 "src/geokit/polyline.gleam" = ["short_variable_name"]
-"src/geokit/mercator.gleam" = ["short_variable_name"]
-"src/geokit/bbox.gleam" = ["short_variable_name"]
-"src/geokit/centroid.gleam" = ["short_variable_name"]
-"src/geokit/simplify.gleam" = ["short_variable_name"]
-"src/geokit/latlng.gleam" = [
-  "short_variable_name",
-  "assert_ok_pattern",
-  "avoid_panic",
-]
+"src/geokit/tile.gleam" = ["short_variable_name"]

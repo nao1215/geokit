@@ -5,14 +5,13 @@ import gleam/option.{None, Some}
 import gleam/string
 import gleeunit/should
 
+import geokit
 import geokit/geojson
-import geokit/geometry
-import geokit/latlng
 
 // --- helpers -------------------------------------------------------------
 
-fn p(lat: Float, lng: Float) -> latlng.LatLng {
-  let assert Ok(point) = latlng.new(lat: lat, lng: lng)
+fn p(lat: Float, lng: Float) -> geokit.LatLng {
+  let assert Ok(point) = geokit.lat_lng(latitude: lat, longitude: lng)
   point
 }
 
@@ -21,22 +20,39 @@ fn p(lat: Float, lng: Float) -> latlng.LatLng {
 // whole-number floats as `0` while Erlang renders them as `0.0`, so a
 // byte-exact assertion on the encoded string would diverge between
 // targets. A round-trip is the contract that actually matters.
-fn round_trip(g: geometry.Geometry) -> geometry.Geometry {
-  let encoded = geojson.encode_geometry(geometry: g)
-  let assert Ok(decoded) = geojson.decode_geometry(input: encoded)
+fn round_trip(g: geokit.Geometry) -> geokit.Geometry {
+  let encoded = encode_geometry(g)
+  let assert Ok(decoded) = parse_geometry(encoded)
   decoded
+}
+
+fn encode_geometry(geometry: geokit.Geometry) -> String {
+  geojson.geometry_to_json(geometry) |> json.to_string
+}
+
+fn parse_geometry(input: String) -> Result(geokit.Geometry, json.DecodeError) {
+  json.parse(input, geojson.geometry_decoder())
+}
+
+// The first decode error of a failed parse.
+fn first_error(result: Result(a, json.DecodeError)) -> decode.DecodeError {
+  let assert Error(json.UnableToDecode([error, ..])) = result
+  error
+}
+
+fn expected(result: Result(a, json.DecodeError)) -> String {
+  first_error(result).expected
 }
 
 // --- encode: shape sanity via round-trip --------------------------------
 
 pub fn encode_point_round_trip_test() -> Nil {
-  let original = geometry.Point(p(35.6812, 139.7671))
+  let original = geokit.Point(p(35.6812, 139.7671))
   round_trip(original) |> should.equal(original)
 }
 
 pub fn encode_line_string_round_trip_test() -> Nil {
-  let original =
-    geometry.LineString([p(35.6812, 139.7671), p(34.6937, 135.5023)])
+  let original = geokit.LineString([p(35.6812, 139.7671), p(34.6937, 135.5023)])
   round_trip(original) |> should.equal(original)
 }
 
@@ -47,7 +63,7 @@ pub fn encode_polygon_round_trip_test() -> Nil {
     p(35.6813, 139.7672),
     p(35.6812, 139.7671),
   ]
-  let original = geometry.Polygon([ring])
+  let original = geokit.Polygon([ring])
   round_trip(original) |> should.equal(original)
 }
 
@@ -64,8 +80,21 @@ pub fn encode_multi_polygon_round_trip_test() -> Nil {
     p(34.6938, 135.5024),
     p(34.6937, 135.5023),
   ]
-  let original = geometry.MultiPolygon([[ring_a], [ring_b]])
+  let original = geokit.MultiPolygon([[ring_a], [ring_b]])
   round_trip(original) |> should.equal(original)
+}
+
+pub fn encode_open_polygon_ring_is_closed_test() -> Nil {
+  // geokit.Polygon allows open rings, but GeoJSON requires closed ones:
+  // the encoder appends the first position so the output decodes.
+  let a = p(35.0, 139.0)
+  let b = p(35.0, 139.5)
+  let c = p(35.5, 139.5)
+  let d = p(35.5, 139.0)
+  round_trip(geokit.Polygon([[a, b, c, d]]))
+  |> should.equal(geokit.Polygon([[a, b, c, d, a]]))
+  round_trip(geokit.MultiPolygon([[[a, b, c, d]]]))
+  |> should.equal(geokit.MultiPolygon([[[a, b, c, d, a]]]))
 }
 
 // --- encode: shape sanity via substring checks -------------------------
@@ -74,39 +103,38 @@ pub fn encode_point_shape_test() -> Nil {
   // GeoJSON coordinate order is [lng, lat] — verify both numbers
   // appear and that lng comes first. Using non-whole-number floats
   // so both target runtimes render them identically.
-  let encoded =
-    geojson.encode_geometry(geometry: geometry.Point(p(35.6812, 139.7671)))
+  let encoded = encode_geometry(geokit.Point(p(35.6812, 139.7671)))
   string.contains(encoded, "\"type\":\"Point\"") |> should.be_true
   string.contains(encoded, "[139.7671,35.6812]") |> should.be_true
 }
 
 pub fn encode_polygon_nests_rings_test() -> Nil {
   let encoded =
-    geojson.encode_geometry(
-      geometry: geometry.Polygon([
+    encode_geometry(
+      geokit.Polygon([
         [p(35.6812, 139.7671), p(35.6813, 139.7672)],
       ]),
     )
   string.contains(encoded, "\"type\":\"Polygon\"") |> should.be_true
-  string.contains(encoded, "[[[139.7671,35.6812],[139.7672,35.6813]]]")
+  string.contains(
+    encoded,
+    "[[[139.7671,35.6812],[139.7672,35.6813],[139.7671,35.6812]]]",
+  )
   |> should.be_true
 }
 
 // --- decode: each geometry type -----------------------------------------
 
 pub fn decode_point_test() -> Nil {
-  let assert Ok(geometry.Point(point)) =
-    geojson.decode_geometry(
-      input: "{\"type\":\"Point\",\"coordinates\":[139.0,35.0]}",
-    )
-  latlng.lat(point) |> should.equal(35.0)
-  latlng.lng(point) |> should.equal(139.0)
+  let assert Ok(geokit.Point(point)) =
+    parse_geometry("{\"type\":\"Point\",\"coordinates\":[139.0,35.0]}")
+  geokit.latitude(point) |> should.equal(35.0)
+  geokit.longitude(point) |> should.equal(139.0)
 }
 
 pub fn decode_line_string_test() -> Nil {
   let input = "{\"type\":\"LineString\",\"coordinates\":[[0.0,0.0],[1.0,1.0]]}"
-  let assert Ok(geometry.LineString(points)) =
-    geojson.decode_geometry(input: input)
+  let assert Ok(geokit.LineString(points)) = parse_geometry(input)
   points
   |> should.equal([p(0.0, 0.0), p(1.0, 1.0)])
 }
@@ -114,7 +142,7 @@ pub fn decode_line_string_test() -> Nil {
 pub fn decode_polygon_test() -> Nil {
   let input =
     "{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[0.0,0.0]]]}"
-  let assert Ok(geometry.Polygon(rings)) = geojson.decode_geometry(input: input)
+  let assert Ok(geokit.Polygon(rings)) = parse_geometry(input)
   rings
   |> should.equal([[p(0.0, 0.0), p(0.0, 1.0), p(1.0, 1.0), p(0.0, 0.0)]])
 }
@@ -122,48 +150,38 @@ pub fn decode_polygon_test() -> Nil {
 pub fn decode_multi_polygon_test() -> Nil {
   let input =
     "{\"type\":\"MultiPolygon\",\"coordinates\":[[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[0.0,0.0]]]]}"
-  let assert Ok(geometry.MultiPolygon(polygons)) =
-    geojson.decode_geometry(input: input)
+  let assert Ok(geokit.MultiPolygon(polygons)) = parse_geometry(input)
   polygons
   |> should.equal([[[p(0.0, 0.0), p(0.0, 1.0), p(1.0, 1.0), p(0.0, 0.0)]]])
 }
 
 pub fn decode_polygon_with_no_rings_is_rejected_test() -> Nil {
-  let result =
-    geojson.decode_geometry(input: "{\"type\":\"Polygon\",\"coordinates\":[]}")
-  case result {
-    Error(geojson.InvalidPolygon(reason: _)) -> Nil
-    _ -> should.fail()
-  }
+  parse_geometry("{\"type\":\"Polygon\",\"coordinates\":[]}")
+  |> expected
+  |> should.equal("Polygon with at least one linear ring")
 }
 
 pub fn decode_polygon_with_empty_ring_is_rejected_test() -> Nil {
-  let result =
-    geojson.decode_geometry(
-      input: "{\"type\":\"Polygon\",\"coordinates\":[[]]}",
-    )
-  case result {
-    Error(geojson.InvalidPolygon(reason: _)) -> Nil
-    _ -> should.fail()
-  }
+  parse_geometry("{\"type\":\"Polygon\",\"coordinates\":[[]]}")
+  |> expected
+  |> should.equal("linear ring with at least 4 positions")
 }
 
 pub fn decode_polygon_with_three_position_ring_is_rejected_test() -> Nil {
   let input =
     "{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,0.0],[0.0,0.0]]]}"
-  case geojson.decode_geometry(input: input) {
-    Error(geojson.InvalidPolygon(reason: _)) -> Nil
-    _ -> should.fail()
-  }
+  parse_geometry(input)
+  |> expected
+  |> should.equal("linear ring with at least 4 positions")
 }
 
 pub fn decode_polygon_with_unclosed_ring_is_rejected_test() -> Nil {
   let input =
     "{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[0.5,0.5]]]}"
-  case geojson.decode_geometry(input: input) {
-    Error(geojson.InvalidPolygon(reason: _)) -> Nil
-    _ -> should.fail()
-  }
+  let error = first_error(parse_geometry(input))
+  error.expected
+  |> should.equal("closed linear ring (first position equal to last)")
+  error.path |> should.equal(["coordinates", "0"])
 }
 
 pub fn decode_polygon_whose_ring_ends_on_the_same_latitude_is_rejected_test() -> Nil {
@@ -173,141 +191,156 @@ pub fn decode_polygon_whose_ring_ends_on_the_same_latitude_is_rejected_test() ->
     "{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[2.0,0.0]]]}"
   let same_longitude =
     "{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[0.0,2.0]]]}"
-  case geojson.decode_geometry(input: same_latitude) {
-    Error(geojson.InvalidPolygon(reason: _)) -> Nil
-    _ -> should.fail()
-  }
-  case geojson.decode_geometry(input: same_longitude) {
-    Error(geojson.InvalidPolygon(reason: _)) -> Nil
-    _ -> should.fail()
-  }
+  parse_geometry(same_latitude)
+  |> expected
+  |> should.equal("closed linear ring (first position equal to last)")
+  parse_geometry(same_longitude)
+  |> expected
+  |> should.equal("closed linear ring (first position equal to last)")
 }
 
 pub fn decode_multi_polygon_with_invalid_sub_polygon_is_rejected_test() -> Nil {
   let input = "{\"type\":\"MultiPolygon\",\"coordinates\":[[[]]]}"
-  case geojson.decode_geometry(input: input) {
-    Error(geojson.InvalidPolygon(reason: _)) -> Nil
-    _ -> should.fail()
-  }
+  let error = first_error(parse_geometry(input))
+  error.expected |> should.equal("linear ring with at least 4 positions")
+  error.path |> should.equal(["coordinates", "0", "0"])
 }
 
 pub fn decode_missing_coordinates_reports_path_test() -> Nil {
-  // Previously surfaced as the opaque "JSON shape did not match
-  // expected GeoJSON"; the reason now names the failing field path
-  // and the decoder's expected/found pair so a caller can return
-  // a useful 400.
-  case geojson.decode_geometry(input: "{\"type\":\"Point\"}") {
-    Error(geojson.InvalidStructure(reason: reason)) -> {
-      string.contains(reason, "coordinates") |> should.be_true
-    }
-    _ -> should.fail()
-  }
+  // The error names the missing field so a caller can return a useful
+  // 400.
+  let error = first_error(parse_geometry("{\"type\":\"Point\"}"))
+  error.path |> should.equal(["coordinates"])
 }
 
 pub fn decode_non_numeric_coordinates_reports_path_test() -> Nil {
   let input = "{\"type\":\"Point\",\"coordinates\":[\"a\",\"b\"]}"
-  case geojson.decode_geometry(input: input) {
-    Error(geojson.InvalidStructure(reason: reason)) -> {
-      string.contains(reason, "Float") |> should.be_true
-    }
-    _ -> should.fail()
-  }
+  let error = first_error(parse_geometry(input))
+  string.contains(error.expected, "Float") |> should.be_true
+  error.path |> should.equal(["coordinates", "0"])
 }
 
 pub fn decode_null_coordinates_reports_path_test() -> Nil {
   let input = "{\"type\":\"Point\",\"coordinates\":[null,null]}"
-  case geojson.decode_geometry(input: input) {
-    Error(geojson.InvalidStructure(reason: reason)) -> {
-      string.contains(reason, "Float") |> should.be_true
-    }
-    _ -> should.fail()
-  }
+  parse_geometry(input)
+  |> expected
+  |> string.contains("Float")
+  |> should.be_true
 }
 
 // --- altitude (3rd coordinate) is accepted and discarded ----------------
 
 pub fn decode_point_with_altitude_test() -> Nil {
-  let assert Ok(geometry.Point(point)) =
-    geojson.decode_geometry(
-      input: "{\"type\":\"Point\",\"coordinates\":[139.0,35.0,123.4]}",
-    )
-  latlng.lat(point) |> should.equal(35.0)
-  latlng.lng(point) |> should.equal(139.0)
+  let assert Ok(geokit.Point(point)) =
+    parse_geometry("{\"type\":\"Point\",\"coordinates\":[139.0,35.0,123.4]}")
+  geokit.latitude(point) |> should.equal(35.0)
+  geokit.longitude(point) |> should.equal(139.0)
 }
 
 // --- decode errors -------------------------------------------------------
 
 pub fn decode_invalid_json_test() -> Nil {
-  let assert Error(geojson.InvalidJson(_)) =
-    geojson.decode_geometry(input: "{not json")
+  let assert Error(json.UnexpectedByte(_)) = parse_geometry("{not json")
   Nil
 }
 
 pub fn decode_unknown_type_test() -> Nil {
-  let assert Error(geojson.UnknownType("Hexagon")) =
-    geojson.decode_geometry(input: "{\"type\":\"Hexagon\",\"coordinates\":[]}")
-  Nil
+  let error =
+    first_error(parse_geometry("{\"type\":\"Hexagon\",\"coordinates\":[]}"))
+  error.expected
+  |> should.equal(
+    "Point, MultiPoint, LineString, MultiLineString, Polygon or MultiPolygon",
+  )
+  error.path |> should.equal(["type"])
 }
 
 pub fn decode_multi_point_test() -> Nil {
-  let assert Ok(geometry.MultiPoint([point_a, point_b])) =
-    geojson.decode_geometry(
-      // GeoJSON coordinate order is [longitude, latitude] — the
-      // decoder is expected to swap to geokit's `lat, lng` shape.
-      input: "{\"type\":\"MultiPoint\",\"coordinates\":[[139.0,35.0],[140.0,36.0]]}",
+  // GeoJSON coordinate order is [longitude, latitude]; the decoder swaps
+  // it to geokit's latitude, longitude.
+  let assert Ok(geokit.MultiPoint([point_a, point_b])) =
+    parse_geometry(
+      "{\"type\":\"MultiPoint\",\"coordinates\":[[139.0,35.0],[140.0,36.0]]}",
     )
-  let assert Ok(expected_a) = latlng.new(lat: 35.0, lng: 139.0)
-  let assert Ok(expected_b) = latlng.new(lat: 36.0, lng: 140.0)
-  let assert True = point_a == expected_a
-  let assert True = point_b == expected_b
-  Nil
+  let assert Ok(expected_a) = geokit.lat_lng(latitude: 35.0, longitude: 139.0)
+  let assert Ok(expected_b) = geokit.lat_lng(latitude: 36.0, longitude: 140.0)
+  point_a |> should.equal(expected_a)
+  point_b |> should.equal(expected_b)
 }
 
 pub fn encode_multi_point_round_trips_test() -> Nil {
-  let assert Ok(a) = latlng.new(lat: 35.0, lng: 139.0)
-  let assert Ok(b) = latlng.new(lat: 36.0, lng: 140.0)
-  let encoded = geojson.encode_geometry(geometry: geometry.MultiPoint([a, b]))
-  let assert Ok(geometry.MultiPoint([decoded_a, decoded_b])) =
-    geojson.decode_geometry(input: encoded)
-  let assert True = decoded_a == a
-  let assert True = decoded_b == b
-  Nil
+  let assert Ok(a) = geokit.lat_lng(latitude: 35.0, longitude: 139.0)
+  let assert Ok(b) = geokit.lat_lng(latitude: 36.0, longitude: 140.0)
+  let encoded = encode_geometry(geokit.MultiPoint([a, b]))
+  parse_geometry(encoded) |> should.equal(Ok(geokit.MultiPoint([a, b])))
+}
+
+pub fn decode_multi_line_string_test() -> Nil {
+  parse_geometry(
+    "{\"type\":\"MultiLineString\",\"coordinates\":[[[0,0],[1,1]],[[2,2]]]}",
+  )
+  |> should.equal(
+    Ok(geokit.MultiLineString([[p(0.0, 0.0), p(1.0, 1.0)], [p(2.0, 2.0)]])),
+  )
+}
+
+pub fn encode_multi_line_string_round_trip_test() -> Nil {
+  let original =
+    geokit.MultiLineString([
+      [p(35.6812, 139.7671), p(34.6937, 135.5023)],
+      [],
+      [p(-33.5, 151.25)],
+    ])
+  round_trip(original) |> should.equal(original)
+  encode_geometry(geokit.MultiLineString([[p(1.5, 2.5)]]))
+  |> should.equal(
+    "{\"type\":\"MultiLineString\",\"coordinates\":[[[2.5,1.5]]]}",
+  )
 }
 
 pub fn decode_unsupported_geometry_collection_test() -> Nil {
-  let assert Error(geojson.UnsupportedType("GeometryCollection")) =
-    geojson.decode_geometry(
-      input: "{\"type\":\"GeometryCollection\",\"geometries\":[]}",
-    )
-  Nil
+  let error =
+    first_error(parse_geometry(
+      "{\"type\":\"GeometryCollection\",\"geometries\":[]}",
+    ))
+  error.expected
+  |> should.equal(
+    "Point, MultiPoint, LineString, MultiLineString, Polygon or MultiPolygon",
+  )
+  error.path |> should.equal(["type"])
 }
 
 pub fn decode_missing_coordinates_test() -> Nil {
-  let assert Error(geojson.InvalidStructure(_)) =
-    geojson.decode_geometry(input: "{\"type\":\"Point\"}")
+  let assert Error(json.UnableToDecode(_)) =
+    parse_geometry("{\"type\":\"Point\"}")
   Nil
 }
 
 pub fn decode_invalid_position_too_few_test() -> Nil {
-  let assert Error(geojson.InvalidPosition([1.0])) =
-    geojson.decode_geometry(input: "{\"type\":\"Point\",\"coordinates\":[1.0]}")
-  Nil
+  parse_geometry("{\"type\":\"Point\",\"coordinates\":[1.0]}")
+  |> expected
+  |> should.equal("position of 2 or 3 numbers")
+  parse_geometry("{\"type\":\"Point\",\"coordinates\":[1,2,3,4]}")
+  |> expected
+  |> should.equal("position of 2 or 3 numbers")
 }
 
 pub fn decode_lat_out_of_range_test() -> Nil {
-  let assert Error(geojson.InvalidLatLng(latlng.LatOutOfRange(lat: 95.0))) =
-    geojson.decode_geometry(
-      input: "{\"type\":\"Point\",\"coordinates\":[0.0,95.0]}",
-    )
-  Nil
+  let error =
+    first_error(parse_geometry(
+      "{\"type\":\"Point\",\"coordinates\":[0.0,95.0]}",
+    ))
+  error.expected |> should.equal("latitude in [-90, 90]")
+  error.path |> should.equal(["coordinates"])
 }
 
 pub fn decode_lng_out_of_range_test() -> Nil {
-  let assert Error(geojson.InvalidLatLng(latlng.LngOutOfRange(lng: 200.0))) =
-    geojson.decode_geometry(
-      input: "{\"type\":\"Point\",\"coordinates\":[200.0,0.0]}",
-    )
-  Nil
+  parse_geometry("{\"type\":\"Point\",\"coordinates\":[200.0,0.0]}")
+  |> expected
+  |> should.equal("longitude in [-180, 180]")
+  parse_geometry("{\"type\":\"LineString\",\"coordinates\":[[0,0],[-181,0]]}")
+  |> first_error
+  |> fn(error: decode.DecodeError) { #(error.expected, error.path) }
+  |> should.equal(#("longitude in [-180, 180]", ["coordinates", "1"]))
 }
 
 // --- Feature: encode + decode with typed properties ---------------------
@@ -332,12 +365,12 @@ fn city_decoder() -> decode.Decoder(CityProps) {
 pub fn encode_feature_shape_test() -> Nil {
   let feature =
     geojson.Feature(
-      geometry: geometry.Point(p(35.6812, 139.7671)),
+      geometry: Some(geokit.Point(p(35.6812, 139.7671))),
       properties: CityProps(name: "Tokyo", population: 13_960_000),
       id: Some(geojson.StringId("tokyo")),
     )
   let encoded =
-    geojson.encode_feature(feature: feature, properties: city_to_json)
+    geojson.feature_to_json(feature, properties: city_to_json) |> json.to_string
   string.contains(encoded, "\"type\":\"Feature\"") |> should.be_true
   string.contains(encoded, "\"geometry\":") |> should.be_true
   string.contains(encoded, "\"properties\":{\"name\":\"Tokyo\"")
@@ -348,28 +381,30 @@ pub fn encode_feature_shape_test() -> Nil {
 pub fn encode_feature_round_trip_test() -> Nil {
   let original =
     geojson.Feature(
-      geometry: geometry.Point(p(35.6812, 139.7671)),
+      geometry: Some(geokit.Point(p(35.6812, 139.7671))),
       properties: CityProps(name: "Tokyo", population: 13_960_000),
       id: Some(geojson.StringId("tokyo")),
     )
   let encoded =
-    geojson.encode_feature(feature: original, properties: city_to_json)
+    geojson.feature_to_json(original, properties: city_to_json)
+    |> json.to_string
   let assert Ok(decoded) =
-    geojson.decode_feature(input: encoded, properties: city_decoder())
+    json.parse(encoded, geojson.feature_decoder(properties: city_decoder()))
   decoded |> should.equal(original)
 }
 
 pub fn encode_feature_without_id_round_trip_test() -> Nil {
   let original =
     geojson.Feature(
-      geometry: geometry.Point(p(35.6812, 139.7671)),
+      geometry: Some(geokit.Point(p(35.6812, 139.7671))),
       properties: CityProps(name: "Tokyo", population: 13_960_000),
       id: None,
     )
   let encoded =
-    geojson.encode_feature(feature: original, properties: city_to_json)
+    geojson.feature_to_json(original, properties: city_to_json)
+    |> json.to_string
   let assert Ok(decoded) =
-    geojson.decode_feature(input: encoded, properties: city_decoder())
+    json.parse(encoded, geojson.feature_decoder(properties: city_decoder()))
   decoded |> should.equal(original)
 }
 
@@ -377,7 +412,7 @@ pub fn decode_feature_int_id_test() -> Nil {
   let input =
     "{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[0.0,0.0]},\"properties\":{\"name\":\"X\",\"population\":1},\"id\":42}"
   let assert Ok(feature) =
-    geojson.decode_feature(input: input, properties: city_decoder())
+    json.parse(input, geojson.feature_decoder(properties: city_decoder()))
   feature.id |> should.equal(Some(geojson.IntId(42)))
 }
 
@@ -386,25 +421,23 @@ pub fn decode_feature_int_id_test() -> Nil {
 pub fn feature_collection_round_trip_test() -> Nil {
   let features = [
     geojson.Feature(
-      geometry: geometry.Point(p(35.6812, 139.7671)),
+      geometry: Some(geokit.Point(p(35.6812, 139.7671))),
       properties: CityProps(name: "Tokyo", population: 13_960_000),
       id: None,
     ),
     geojson.Feature(
-      geometry: geometry.Point(p(34.6937, 135.5023)),
+      geometry: Some(geokit.Point(p(34.6937, 135.5023))),
       properties: CityProps(name: "Osaka", population: 2_700_000),
       id: None,
     ),
   ]
   let encoded =
-    geojson.encode_feature_collection(
-      features: features,
-      properties: city_to_json,
-    )
+    geojson.feature_collection_to_json(features, properties: city_to_json)
+    |> json.to_string
   let assert Ok(decoded) =
-    geojson.decode_feature_collection(
-      input: encoded,
-      properties: city_decoder(),
+    json.parse(
+      encoded,
+      geojson.feature_collection_decoder(properties: city_decoder()),
     )
   decoded |> should.equal(features)
 }
@@ -412,50 +445,42 @@ pub fn feature_collection_round_trip_test() -> Nil {
 // --- integer coordinates ------------------------------------------------
 
 pub fn decode_point_with_integer_coordinates_test() -> Nil {
-  let assert Ok(geometry.Point(point)) =
-    geojson.decode_geometry(
-      input: "{\"type\":\"Point\",\"coordinates\":[139,35,12]}",
-    )
-  #(latlng.lat(point), latlng.lng(point))
+  let assert Ok(geokit.Point(point)) =
+    parse_geometry("{\"type\":\"Point\",\"coordinates\":[139,35,12]}")
+  #(geokit.latitude(point), geokit.longitude(point))
   |> should.equal(#(35.0, 139.0))
 }
 
 pub fn decode_mixed_integer_and_float_coordinates_test() -> Nil {
-  let assert Ok(geometry.LineString(points)) =
-    geojson.decode_geometry(
-      input: "{\"type\":\"LineString\",\"coordinates\":[[0,0],[1.5,2]]}",
-    )
+  let assert Ok(geokit.LineString(points)) =
+    parse_geometry("{\"type\":\"LineString\",\"coordinates\":[[0,0],[1.5,2]]}")
   points
   |> should.equal([
-    latlng.new_or_panic(lat: 0.0, lng: 0.0),
-    latlng.new_or_panic(lat: 2.0, lng: 1.5),
+    geokit.wrap_lat_lng(latitude: 0.0, longitude: 0.0),
+    geokit.wrap_lat_lng(latitude: 2.0, longitude: 1.5),
   ])
 }
 
 pub fn decode_polygons_with_integer_coordinates_test() -> Nil {
   let ring = "[[0,0],[10,0],[10,10],[0,0]]"
   let expected = [
-    latlng.new_or_panic(lat: 0.0, lng: 0.0),
-    latlng.new_or_panic(lat: 0.0, lng: 10.0),
-    latlng.new_or_panic(lat: 10.0, lng: 10.0),
-    latlng.new_or_panic(lat: 0.0, lng: 0.0),
+    geokit.wrap_lat_lng(latitude: 0.0, longitude: 0.0),
+    geokit.wrap_lat_lng(latitude: 0.0, longitude: 10.0),
+    geokit.wrap_lat_lng(latitude: 10.0, longitude: 10.0),
+    geokit.wrap_lat_lng(latitude: 0.0, longitude: 0.0),
   ]
-  geojson.decode_geometry(
-    input: "{\"type\":\"Polygon\",\"coordinates\":[" <> ring <> "]}",
+  parse_geometry("{\"type\":\"Polygon\",\"coordinates\":[" <> ring <> "]}")
+  |> should.equal(Ok(geokit.Polygon([expected])))
+  parse_geometry(
+    "{\"type\":\"MultiPolygon\",\"coordinates\":[[" <> ring <> "]]}",
   )
-  |> should.equal(Ok(geometry.Polygon([expected])))
-  geojson.decode_geometry(
-    input: "{\"type\":\"MultiPolygon\",\"coordinates\":[[" <> ring <> "]]}",
-  )
-  |> should.equal(Ok(geometry.MultiPolygon([[expected]])))
-  geojson.decode_geometry(
-    input: "{\"type\":\"MultiPoint\",\"coordinates\":[[1,2],[3,4]]}",
-  )
+  |> should.equal(Ok(geokit.MultiPolygon([[expected]])))
+  parse_geometry("{\"type\":\"MultiPoint\",\"coordinates\":[[1,2],[3,4]]}")
   |> should.equal(
     Ok(
-      geometry.MultiPoint([
-        latlng.new_or_panic(lat: 2.0, lng: 1.0),
-        latlng.new_or_panic(lat: 4.0, lng: 3.0),
+      geokit.MultiPoint([
+        geokit.wrap_lat_lng(latitude: 2.0, longitude: 1.0),
+        geokit.wrap_lat_lng(latitude: 4.0, longitude: 3.0),
       ]),
     ),
   )
@@ -467,8 +492,7 @@ pub fn decode_polygon_closed_with_signed_zero_test() -> Nil {
   // The ring starts at 0.0 and ends at -0.0: the same position.
   let input =
     "{\"type\":\"Polygon\",\"coordinates\":[[[0.0,0.0],[1.0,0.0],[1.0,1.0],[-0.0,-0.0]]]}"
-  let assert Ok(geometry.Polygon([ring])) =
-    geojson.decode_geometry(input: input)
+  let assert Ok(geokit.Polygon([ring])) = parse_geometry(input)
   list.length(ring)
   |> should.equal(4)
 }
@@ -481,15 +505,71 @@ pub fn decode_polygon_closed_with_signed_zero_test() -> Nil {
 pub fn decode_huge_integer_coordinate_is_an_error_test() -> Nil {
   let huge = "1" <> string.repeat("0", 400)
   let input = "{\"type\":\"Point\",\"coordinates\":[" <> huge <> ",0]}"
-  case geojson.decode_geometry(input: input) {
-    Error(geojson.InvalidStructure(_)) -> Nil
-    _ -> should.be_true(False)
-  }
+  parse_geometry(input)
+  |> expected
+  |> should.equal("Float")
 }
 
 pub fn decode_integer_coordinates_test() -> Nil {
-  geojson.decode_geometry(
-    input: "{\"type\":\"Point\",\"coordinates\":[-180,90]}",
+  parse_geometry("{\"type\":\"Point\",\"coordinates\":[-180,90]}")
+  |> should.equal(Ok(geokit.Point(p(90.0, -180.0))))
+}
+
+// --- null geometry and number ids ---------------------------------------
+
+pub fn feature_with_null_geometry_round_trips_test() -> Nil {
+  let original =
+    geojson.Feature(
+      geometry: None,
+      properties: CityProps(name: "Nowhere", population: 0),
+      id: Some(geojson.IntId(7)),
+    )
+  let encoded =
+    geojson.feature_to_json(original, properties: city_to_json)
+    |> json.to_string
+  string.contains(encoded, "\"geometry\":null") |> should.be_true
+  json.parse(encoded, geojson.feature_decoder(properties: city_decoder()))
+  |> should.equal(Ok(original))
+}
+
+pub fn decode_feature_float_id_test() -> Nil {
+  let input =
+    "{\"type\":\"Feature\",\"geometry\":null,\"properties\":null,\"id\":1.5}"
+  let assert Ok(feature) =
+    json.parse(input, geojson.feature_decoder(properties: decode.dynamic))
+  feature.id |> should.equal(Some(geojson.FloatId(1.5)))
+}
+
+pub fn decode_feature_with_wrong_type_fails_test() -> Nil {
+  let error =
+    json.parse(
+      "{\"type\":\"Point\",\"coordinates\":[0,0]}",
+      geojson.feature_decoder(properties: decode.dynamic),
+    )
+    |> first_error
+  error.expected |> should.equal("Feature")
+  error.path |> should.equal(["type"])
+}
+
+pub fn decode_feature_collection_with_wrong_type_fails_test() -> Nil {
+  json.parse(
+    "{\"type\":\"Feature\",\"features\":[]}",
+    geojson.feature_collection_decoder(properties: decode.dynamic),
   )
-  |> should.equal(Ok(geometry.Point(p(90.0, -180.0))))
+  |> expected
+  |> should.equal("FeatureCollection")
+}
+
+pub fn decode_feature_collection_reports_bad_feature_path_test() -> Nil {
+  let input =
+    "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[0,99]},\"properties\":null}]}"
+  let error =
+    json.parse(
+      input,
+      geojson.feature_collection_decoder(properties: decode.dynamic),
+    )
+    |> first_error
+  error.expected |> should.equal("latitude in [-90, 90]")
+  error.path
+  |> should.equal(["features", "0", "geometry", "coordinates"])
 }

@@ -7,7 +7,7 @@
 [![Hex](https://img.shields.io/hexpm/v/geokit)](https://hex.pm/packages/geokit)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/geokit/)
 [![Hex Downloads](https://img.shields.io/hexpm/dt/geokit)](https://hex.pm/packages/geokit)
-[![License](https://img.shields.io/github/license/nao1215/geokit)](./LICENSE)
+[![License](https://img.shields.io/github/license/nao1215/geokit)](https://github.com/nao1215/geokit/blob/main/LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/nao1215/geokit/badge)](https://scorecard.dev/viewer/?uri=github.com/nao1215/geokit)
 
 Distance, bearing, geohash, polyline, GeoJSON, map tiles and polygon
@@ -19,249 +19,65 @@ gleam add geokit
 
 ## Usage
 
-Haversine distance and initial bearing:
+Distance and bearing between two points:
 
 ```gleam
-import geokit/bearing
-import geokit/distance
-import geokit/latlng
+import geokit
 
 pub fn tokyo_to_osaka() -> #(Float, Float) {
-  let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(osaka) = latlng.new(lat: 34.6937, lng: 135.5023)
+  let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  let assert Ok(osaka) = geokit.lat_lng(latitude: 34.6937, longitude: 135.5023)
   #(
-    distance.haversine(a: tokyo, b: osaka),
-    // ≈ 402_784.74 m
-    bearing.initial(from: tokyo, to: osaka),
-    // ≈ 255.42°
+    geokit.distance(from: tokyo, to: osaka),
+    geokit.initial_bearing(from: tokyo, to: osaka),
   )
+  // -> #(402_784.74, 255.42), in meters and degrees
 }
 ```
 
-Normalising denormalised coordinates with `latlng.wrap`:
+Reading GeoJSON with [gleam_json](https://hexdocs.pm/gleam_json/) and testing a point against it:
 
 ```gleam
-import geokit/latlng
-
-pub fn antimeridian_wrap() -> #(Float, Float) {
-  // A reading 1° past the antimeridian wraps to the western
-  // hemisphere; latitudes above 90° are clamped to the pole.
-  let point = latlng.wrap(lat: 91.0, lng: 181.0)
-  #(latlng.lat(point), latlng.lng(point))
-  // == #(90.0, -179.0)
-}
-```
-
-Geohash encode, decode, and neighbour lookup:
-
-```gleam
-import geokit/geohash
-import geokit/latlng
-
-pub fn around_tokyo() -> Nil {
-  let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(hash) = geohash.encode(point: tokyo, precision: 8)
-  // hash == "xn76urx6"
-
-  let assert Ok(centre) = geohash.decode(hash: hash)
-  // centre ≈ tokyo (within the cell's precision)
-
-  let assert Ok(neighbours) = geohash.neighbors(hash: hash)
-  // neighbours.north, neighbours.east, ... eight directions
-  Nil
-}
-```
-
-Google Encoded Polyline:
-
-```gleam
-import geokit/latlng
-import geokit/polyline
-
-pub fn route() -> Nil {
-  let assert Ok(p1) = latlng.new(lat: 38.5, lng: -120.2)
-  let assert Ok(p2) = latlng.new(lat: 40.7, lng: -120.95)
-  let assert Ok(p3) = latlng.new(lat: 43.252, lng: -126.453)
-
-  let encoded = polyline.encode(points: [p1, p2, p3])
-  // encoded == "_p~iF~ps|U_ulLnnqC_mqNvxq`@"
-
-  let assert Ok(_decoded) = polyline.decode(input: encoded)
-  Nil
-}
-```
-
-GeoJSON (RFC 7946) Feature with typed properties:
-
-```gleam
-import gleam/dynamic/decode
+import geokit
+import geokit/geojson
 import gleam/json
-import gleam/option.{None}
 
-import geokit/geojson
-import geokit/geometry
-import geokit/latlng
-
-type City {
-  City(name: String, population: Int)
-}
-
-fn city_to_json(c: City) -> json.Json {
-  json.object([
-    #("name", json.string(c.name)),
-    #("population", json.int(c.population)),
-  ])
-}
-
-fn city_decoder() -> decode.Decoder(City) {
-  use name <- decode.field("name", decode.string)
-  use population <- decode.field("population", decode.int)
-  decode.success(City(name: name, population: population))
-}
-
-pub fn round_trip() -> Nil {
-  let assert Ok(p) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let feature =
-    geojson.Feature(
-      geometry: geometry.Point(p),
-      properties: City(name: "Tokyo", population: 13_960_000),
-      id: None,
-    )
-  let encoded =
-    geojson.encode_feature(feature: feature, properties: city_to_json)
-  let assert Ok(_decoded) =
-    geojson.decode_feature(input: encoded, properties: city_decoder())
-  Nil
+pub fn inside_park(input: String) -> Result(geokit.Location, Nil) {
+  let assert Ok(park) = json.parse(input, geojson.geometry_decoder())
+  let bench = geokit.wrap_lat_lng(latitude: 2.0, longitude: 2.0)
+  geokit.locate(bench, in: park)
+  // -> Ok(geokit.Inside) for a polygon around (0, 0) to (10, 10)
 }
 ```
 
-A `FeatureCollection` with untyped properties, using `decode.dynamic`:
+Geohash, encoded polyline and Web Mercator tile:
 
 ```gleam
-import gleam/dynamic/decode
-import gleam/list
+import geokit
+import geokit/geohash
+import geokit/polyline
+import geokit/tile
 
-import geokit/geojson
-
-pub fn parse_collection(input: String) -> Int {
-  let assert Ok(features) =
-    geojson.decode_feature_collection(
-      input: input,
-      properties: decode.dynamic,
-    )
-  list.length(features)
+pub fn encodings() -> #(String, String, String) {
+  let assert Ok(tokyo) = geokit.lat_lng(latitude: 35.6812, longitude: 139.7671)
+  let assert Ok(osaka) = geokit.lat_lng(latitude: 34.6937, longitude: 135.5023)
+  let assert Ok(hash) = geohash.encode(tokyo, precision: 8)
+  let assert Ok(route) = polyline.encode([tokyo, osaka], precision: 5)
+  let assert Ok(tokyo_tile) = tile.from_lat_lng(tokyo, zoom: 5)
+  #(hash, route, tile.to_quadkey(tokyo_tile))
+  // -> #("xn76urx6", "o~wxEkgatYzz_E~}_Y", "13300")
 }
 ```
 
-Web Mercator tile and Bing quadkey:
-
-```gleam
-import geokit/latlng
-import geokit/mercator
-
-pub fn tokyo_tile_at_zoom_5() -> #(Int, Int, String) {
-  let assert Ok(tokyo) = latlng.new(lat: 35.6812, lng: 139.7671)
-  let assert Ok(tile) = mercator.from_lat_lng(point: tokyo, zoom: 5)
-  #(
-    mercator.x(tile: tile),
-    mercator.y(tile: tile),
-    mercator.to_quadkey(tile: tile),
-  )
-}
-```
-
-Bounding box, centroid, line simplification:
-
-```gleam
-import geokit/bbox
-import geokit/centroid
-import geokit/geometry
-import geokit/latlng
-import geokit/simplify
-
-pub fn polygon_ops() {
-  let assert Ok(a) = latlng.new(lat: 0.0, lng: 0.0)
-  let assert Ok(b) = latlng.new(lat: 0.0, lng: 10.0)
-  let assert Ok(c) = latlng.new(lat: 10.0, lng: 10.0)
-  let assert Ok(d) = latlng.new(lat: 10.0, lng: 0.0)
-  let polygon = geometry.Polygon([[a, b, c, d, a]])
-
-  let assert Ok(#(sw, ne)) = bbox.compute(geometry: polygon)
-  let assert Ok(centre) = centroid.compute(geometry: polygon)
-  let assert Ok(reduced) =
-    simplify.line_string(points: [a, b, c, d], tolerance: 0.001)
-  #(sw, ne, centre, reduced)
-}
-```
-
-Point in polygon, with a hole (Turf's `booleanPointInPolygon`):
-
-```gleam
-import geokit/geometry
-import geokit/latlng
-import geokit/point_in_polygon
-
-pub fn park_and_lake() {
-  let park = [
-    latlng.new_or_panic(lat: 0.0, lng: 0.0),
-    latlng.new_or_panic(lat: 0.0, lng: 10.0),
-    latlng.new_or_panic(lat: 10.0, lng: 10.0),
-    latlng.new_or_panic(lat: 10.0, lng: 0.0),
-    latlng.new_or_panic(lat: 0.0, lng: 0.0),
-  ]
-  let lake = [
-    latlng.new_or_panic(lat: 4.0, lng: 4.0),
-    latlng.new_or_panic(lat: 4.0, lng: 6.0),
-    latlng.new_or_panic(lat: 6.0, lng: 6.0),
-    latlng.new_or_panic(lat: 6.0, lng: 4.0),
-    latlng.new_or_panic(lat: 4.0, lng: 4.0),
-  ]
-  // The first ring is the exterior; the others are holes.
-  let polygon = geometry.Polygon([park, lake])
-
-  let bench = latlng.new_or_panic(lat: 2.0, lng: 2.0)
-  let boat = latlng.new_or_panic(lat: 5.0, lng: 5.0)
-  let gate = latlng.new_or_panic(lat: 0.0, lng: 5.0)
-  #(
-    point_in_polygon.contains(geometry: polygon, point: bench),
-    // == Ok(True)
-    point_in_polygon.contains(geometry: polygon, point: boat),
-    // == Ok(False), the boat is in the hole
-    point_in_polygon.contains(geometry: polygon, point: gate),
-    // == Ok(True), the boundary counts as inside
-    point_in_polygon.locate(geometry: polygon, point: gate),
-    // == Ok(point_in_polygon.OnBoundary)
-  )
-}
-```
-
-API reference: <https://hexdocs.pm/geokit/>.
+The API reference is on [HexDocs](https://hexdocs.pm/geokit/).
 
 ## Notes
 
-- Latitudes are degrees in `[-90, 90]` and longitudes degrees in
-  `[-180, 180]`. `latlng.new` rejects anything outside; `latlng.wrap`
-  normalises it instead.
-- Distance and bearing use the spherical-earth approximation with the
-  WGS84 mean radius of 6_371_008.8 m. The error against an
-  ellipsoidal (Vincenty) distance is bounded by 0.5 % anywhere on
-  Earth.
-- Polygon and line operations treat the lat/lng plane as flat. For
-  polygons spanning more than a few degrees, project to Web Mercator
-  with `geokit/mercator` first.
-- Bounding boxes and point-in-polygon tests do not wrap around the
-  antimeridian. Split a shape that crosses it into a `MultiPolygon`
-  at ±180°, as RFC 7946 §3.1.9 recommends.
+- Distance and bearing use a sphere with the mean Earth radius (6,371,008.8 m). The error against an ellipsoidal distance stays under 0.5 %.
+- Bounding box, centroid, simplification and point-in-polygon treat longitude and latitude as a flat plane. Errors grow on shapes wider than a few degrees.
+- The planar operations do not wrap around the antimeridian. Split a shape that crosses it into a `MultiPolygon`, as RFC 7946 §3.1.9 recommends.
 
-## Testing
-
-| Technique | Bug class caught here |
-|---|---|
-| Examples and unit tests | [Wrong values at documented edge cases](doc/testing.md#examples-and-unit-tests) |
-| Generated properties | [Broken invariants and round trips](doc/testing.md#generated-properties) |
-| Metamorphic relations | [Asymmetric handling of hemispheres, meridians, zoom levels and tolerances](doc/testing.md#metamorphic-relations) |
-| Differential testing | [Disagreement with reference implementations](doc/testing.md#differential-testing) |
-| Mutation testing | [Assertions that miss a changed operator or branch](doc/testing.md#mutation-testing) |
+How the package is tested is described in [doc/testing.md](https://github.com/nao1215/geokit/blob/main/doc/testing.md).
 
 ## Verifying releases
 
@@ -282,4 +98,4 @@ sha256sum --check checksums.txt
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/nao1215/geokit/blob/main/LICENSE)
