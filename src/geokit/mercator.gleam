@@ -143,18 +143,21 @@ fn to_quadkey_loop(
   level level: Int,
   acc acc: String,
 ) -> String {
-  use <- bool.guard(when: level <= 0, return: acc)
-  let mask = int.bitwise_shift_left(1, level - 1)
-  let bit_x = tile.x / mask % 2
-  let bit_y = tile.y / mask % 2
-  let digit = bit_x + 2 * bit_y
-  let char = case digit {
-    0 -> "0"
-    1 -> "1"
-    2 -> "2"
-    _ -> "3"
+  case level {
+    0 -> acc
+    _ -> {
+      let mask = int.bitwise_shift_left(1, level - 1)
+      let bit_x = tile.x / mask % 2
+      let bit_y = tile.y / mask % 2
+      let char = case bit_x + 2 * bit_y {
+        0 -> "0"
+        1 -> "1"
+        2 -> "2"
+        _ -> "3"
+      }
+      to_quadkey_loop(tile: tile, level: level - 1, acc: acc <> char)
+    }
   }
-  to_quadkey_loop(tile: tile, level: level - 1, acc: acc <> char)
 }
 
 /// Decode a quadkey to a [`Tile`](#Tile). The resulting `zoom` equals
@@ -165,7 +168,6 @@ fn to_quadkey_loop(
 /// (to_quadkey(t))` round-trips for every valid `t` including
 /// zoom 0.
 pub fn from_quadkey(quadkey quadkey: String) -> Result(Tile, MercatorError) {
-  use <- bool.guard(when: quadkey == "", return: Ok(Tile(zoom: 0, x: 0, y: 0)))
   let length = string.length(quadkey)
   use <- bool.guard(
     when: length > 30,

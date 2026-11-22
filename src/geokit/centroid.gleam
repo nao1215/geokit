@@ -95,14 +95,18 @@ pub fn compute(geometry geometry: Geometry) -> Result(LatLng, CentroidError) {
 fn mean_of_points(
   points points: List(LatLng),
 ) -> Result(LatLng, CentroidError) {
-  use <- bool.guard(when: list.is_empty(points), return: Error(EmptyGeometry))
-  let #(sum_lat, sum_lng, count) =
-    list.fold(points, #(0.0, 0.0, 0), fn(sums, p) {
-      let #(sum_lat, sum_lng, count) = sums
-      #(sum_lat +. latlng.lat(p), sum_lng +. latlng.lng(p), count + 1)
-    })
-  let count_f = int.to_float(count)
-  Ok(latlng.wrap(lat: sum_lat /. count_f, lng: sum_lng /. count_f))
+  case points {
+    [] -> Error(EmptyGeometry)
+    _ -> {
+      let #(sum_lat, sum_lng, count) =
+        list.fold(points, #(0.0, 0.0, 0), fn(sums, p) {
+          let #(sum_lat, sum_lng, count) = sums
+          #(sum_lat +. latlng.lat(p), sum_lng +. latlng.lng(p), count + 1)
+        })
+      let count_f = int.to_float(count)
+      Ok(latlng.wrap(lat: sum_lat /. count_f, lng: sum_lng /. count_f))
+    }
+  }
 }
 
 // First moments and twice the area of a polygon, accumulated over its
@@ -127,16 +131,21 @@ fn multipolygon_centroid(
 ) -> Result(LatLng, CentroidError) {
   let polygons =
     list.filter(polygons, fn(rings) { result.is_ok(exterior_ring(rings:)) })
-  use <- bool.guard(when: polygons == [], return: Error(EmptyGeometry))
-  let total =
-    list.fold(polygons, Moments(0.0, 0.0, 0.0), fn(total, rings) {
-      add_moments(total, polygon_moments(rings: rings))
-    })
-  from_moments(moments: total, fallback: fn() {
-    // Every polygon has zero area: average what each one falls back to.
-    list.filter_map(polygons, polygon_centroid)
-    |> mean_of_points
-  })
+  case polygons {
+    [] -> Error(EmptyGeometry)
+    _ -> {
+      let total =
+        list.fold(polygons, Moments(0.0, 0.0, 0.0), fn(total, rings) {
+          add_moments(total, polygon_moments(rings: rings))
+        })
+      from_moments(moments: total, fallback: fn() {
+        // Every polygon has zero area: average what each one falls back
+        // to.
+        list.filter_map(polygons, polygon_centroid)
+        |> mean_of_points
+      })
+    }
+  }
 }
 
 // The exterior ring, or `EmptyGeometry` when there is no ring or the

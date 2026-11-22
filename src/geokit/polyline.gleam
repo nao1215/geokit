@@ -99,8 +99,8 @@ fn encode_loop(
   case points {
     [] -> string.from_utf_codepoints(list.reverse(acc))
     [head, ..tail] -> {
-      let lat_scaled = round_to_int(latlng.lat(head) *. factor)
-      let lng_scaled = round_to_int(latlng.lng(head) *. factor)
+      let lat_scaled = float.round(latlng.lat(head) *. factor)
+      let lng_scaled = float.round(latlng.lng(head) *. factor)
       let acc =
         encode_signed(value: lat_scaled - last_lat, table: table, acc: acc)
       let acc =
@@ -158,9 +158,9 @@ fn push_chunk(
   list.append(list.take(list.drop(table, chunk), 1), acc)
 }
 
-// ZigZag bit-not on the low 32 bits, which the spec calls for. We
-// reproduce the effect with arithmetic since Gleam Int has no
-// dedicated bitwise-not.
+// The ZigZag bit-not (`~value`) written as arithmetic: `int.bitwise_not`
+// works on 32 bits on JavaScript, and scaled values at high precision
+// do not fit in 32 bits.
 fn bit_not_lower(value: Int) -> Int {
   -value - 1
 }
@@ -326,9 +326,4 @@ fn scale_factor(precision: Int) -> Float {
   list.repeat(10, times: precision)
   |> int.product
   |> int.to_float
-}
-
-fn round_to_int(value: Float) -> Int {
-  use <- bool.guard(when: value <. 0.0, return: -float.round(0.0 -. value))
-  float.round(value)
 }
