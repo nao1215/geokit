@@ -7,7 +7,6 @@
 //// distance is bounded by 0.5 % for any two points on Earth, which
 //// matches every consumer-grade mapping API.
 
-import gleam/bool
 import gleam/float
 import gleam_community/maths
 
@@ -56,23 +55,11 @@ pub fn haversine_km(a a: LatLng, b b: LatLng) -> Float {
   haversine(a: a, b: b) /. 1000.0
 }
 
-/// Square root of a non-negative input via Newton iteration. Caller
-/// must ensure the argument is `>= 0`; on a negative input the
-/// function returns `0.0`.
+// `h` is clamped into [0, 1] above, so both arguments are
+// non-negative and `float.square_root` cannot fail.
 fn sqrt_nonneg(x: Float) -> Float {
-  use <- bool.guard(when: x <=. 0.0, return: 0.0)
-  newton_sqrt(value: x, guess: x, iterations: 32)
-}
-
-fn newton_sqrt(
-  value value: Float,
-  guess guess: Float,
-  iterations iterations: Int,
-) -> Float {
-  use <- bool.guard(when: iterations <= 0 || guess == 0.0, return: guess)
-  newton_sqrt(
-    value: value,
-    guess: { guess +. value /. guess } /. 2.0,
-    iterations: iterations - 1,
-  )
+  case float.square_root(float.max(x, 0.0)) {
+    Ok(root) -> root
+    Error(Nil) -> 0.0
+  }
 }

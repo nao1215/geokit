@@ -18,6 +18,7 @@
 //// or its caricature".
 
 import gleam/bool
+import gleam/float
 import gleam/list
 import gleam/result
 
@@ -352,20 +353,11 @@ fn perpendicular_distance(p p: LatLng, a a: LatLng, b b: LatLng) -> Float {
   }
 }
 
+// Callers pass sums of squares, so the input is non-negative and
+// `float.square_root` cannot fail.
 fn sqrt_nonneg(value: Float) -> Float {
-  use <- bool.guard(when: value <=. 0.0, return: 0.0)
-  newton_sqrt(value: value, guess: value, iterations: 32)
-}
-
-fn newton_sqrt(
-  value value: Float,
-  guess guess: Float,
-  iterations iterations: Int,
-) -> Float {
-  use <- bool.guard(when: iterations <= 0 || guess == 0.0, return: guess)
-  newton_sqrt(
-    value: value,
-    guess: { guess +. value /. guess } /. 2.0,
-    iterations: iterations - 1,
-  )
+  case float.square_root(float.max(value, 0.0)) {
+    Ok(root) -> root
+    Error(Nil) -> 0.0
+  }
 }

@@ -329,3 +329,18 @@ pub fn compute_polygon_keeps_original_when_ring_would_collapse_test() -> Nil {
   |> geojson.decode_geometry
   |> should.equal(Ok(simplified))
 }
+
+// --- tiny segments --------------------------------------------------------
+
+pub fn simplify_tiny_segment_test() -> Nil {
+  // The chord from (0, 0) to (lng 1e-12, lat 0) is 1e-12 degrees long
+  // and the middle point is 1e-12 degrees off it, so it survives a
+  // tolerance of 0.9e-12 and is dropped at 1.1e-12.
+  let a = ll(0.0, 0.0)
+  let b = ll(1.0e-12, 0.5e-12)
+  let c = ll(0.0, 1.0e-12)
+  simplify.line_string(points: [a, b, c], tolerance: 0.9e-12)
+  |> should.equal(Ok([a, b, c]))
+  simplify.line_string(points: [a, b, c], tolerance: 1.1e-12)
+  |> should.equal(Ok([a, c]))
+}
