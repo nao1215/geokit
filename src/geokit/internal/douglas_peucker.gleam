@@ -5,12 +5,12 @@ import gleam/bool
 import gleam/float
 import gleam/list
 
-pub type Point =
-  #(Float, Float)
-
 /// Simplifies an open line. `tolerance` is non-negative; a point is kept
 /// when it is farther than `tolerance` from the chord of its span.
-pub fn line(points: List(Point), tolerance tolerance: Float) -> List(Point) {
+pub fn line(
+  points: List(#(Float, Float)),
+  tolerance tolerance: Float,
+) -> List(#(Float, Float)) {
   case points {
     [] | [_] | [_, _] -> points
     [first, ..rest] -> dp(first: first, rest: rest, tolerance: tolerance)
@@ -18,7 +18,10 @@ pub fn line(points: List(Point), tolerance tolerance: Float) -> List(Point) {
 }
 
 /// Simplifies a polygon ring, keeping a closed ring closed and valid.
-pub fn ring(points: List(Point), tolerance tolerance: Float) -> List(Point) {
+pub fn ring(
+  points: List(#(Float, Float)),
+  tolerance tolerance: Float,
+) -> List(#(Float, Float)) {
   // A closed ring starts and ends at the same vertex, so Douglas-Peucker
   // over the whole ring would measure every point against a zero-length
   // chord and could keep only the closing pair. Split at the vertex
@@ -40,11 +43,11 @@ pub fn ring(points: List(Point), tolerance tolerance: Float) -> List(Point) {
 }
 
 fn closed_ring(
-  ring ring: List(Point),
-  first first: Point,
-  rest rest: List(Point),
+  ring ring: List(#(Float, Float)),
+  first first: #(Float, Float),
+  rest rest: List(#(Float, Float)),
   tolerance tolerance: Float,
-) -> List(Point) {
+) -> List(#(Float, Float)) {
   case farthest_from(origin: first, points: rest) {
     Error(Nil) -> ring
     Ok(#(before, pivot, after)) -> {
@@ -120,9 +123,12 @@ fn farthest_from_chord(
 // The point of `points` farthest from `origin` (the earliest one on
 // ties), with the points before it (reversed) and after it.
 fn farthest_from(
-  origin origin: Point,
-  points points: List(Point),
-) -> Result(#(List(Point), Point, List(Point)), Nil) {
+  origin origin: #(Float, Float),
+  points points: List(#(Float, Float)),
+) -> Result(
+  #(List(#(Float, Float)), #(Float, Float), List(#(Float, Float))),
+  Nil,
+) {
   case points {
     [] -> Error(Nil)
     [head, ..tail] -> {
@@ -141,7 +147,11 @@ fn farthest_from(
 // A span of the input between two kept points: `first`, the points in
 // between (in input order) and `last`.
 type Span {
-  Span(first: Point, middle: List(Point), last: Point)
+  Span(
+    first: #(Float, Float),
+    middle: List(#(Float, Float)),
+    last: #(Float, Float),
+  )
 }
 
 // Douglas-Peucker with an explicit stack of spans instead of recursion,
@@ -150,10 +160,10 @@ type Span {
 // span needs no split its `first` is kept, and the input's last point
 // closes the output.
 fn dp(
-  first first: Point,
-  rest rest: List(Point),
+  first first: #(Float, Float),
+  rest rest: List(#(Float, Float)),
   tolerance tolerance: Float,
-) -> List(Point) {
+) -> List(#(Float, Float)) {
   case list.reverse(rest) {
     [] -> [first]
     [last, ..middle_reversed] ->
@@ -169,9 +179,9 @@ fn dp(
 fn dp_loop(
   stack stack: List(Span),
   tolerance tolerance: Float,
-  kept kept: List(Point),
-  end end: Point,
-) -> List(Point) {
+  kept kept: List(#(Float, Float)),
+  end end: #(Float, Float),
+) -> List(#(Float, Float)) {
   case stack {
     [] -> list.reverse([end, ..kept])
     [span, ..rest] ->
@@ -216,12 +226,17 @@ fn farthest(span span: Span) -> Result(#(Float, Span, Span), Nil) {
 }
 
 fn farthest_loop(
-  points points: List(Point),
-  a a: Point,
-  b b: Point,
-  seen seen: List(Point),
-  best best: #(Float, List(Point), Point, List(Point)),
-) -> #(Float, List(Point), Point, List(Point)) {
+  points points: List(#(Float, Float)),
+  a a: #(Float, Float),
+  b b: #(Float, Float),
+  seen seen: List(#(Float, Float)),
+  best best: #(
+    Float,
+    List(#(Float, Float)),
+    #(Float, Float),
+    List(#(Float, Float)),
+  ),
+) -> #(Float, List(#(Float, Float)), #(Float, Float), List(#(Float, Float))) {
   case points {
     [] -> best
     [head, ..tail] -> {
@@ -235,7 +250,11 @@ fn farthest_loop(
   }
 }
 
-fn perpendicular_distance(p p: Point, a a: Point, b b: Point) -> Float {
+fn perpendicular_distance(
+  p p: #(Float, Float),
+  a a: #(Float, Float),
+  b b: #(Float, Float),
+) -> Float {
   let #(x, y) = p
   let #(x1, y1) = a
   let #(x2, y2) = b

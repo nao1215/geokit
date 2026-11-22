@@ -6,11 +6,8 @@ import gleam/int
 import gleam/list
 import gleam/result
 
-pub type Point =
-  #(Float, Float)
-
 /// The arithmetic mean of `points`, or `Error(Nil)` when there are none.
-pub fn mean(points: List(Point)) -> Result(Point, Nil) {
+pub fn mean(points: List(#(Float, Float))) -> Result(#(Float, Float), Nil) {
   use <- bool.guard(when: points == [], return: Error(Nil))
   let #(sum_x, sum_y, count) =
     list.fold(points, #(0.0, 0.0, 0), fn(sums, point) {
@@ -33,7 +30,9 @@ type Moments {
 /// holes). Holes subtract. A polygon with zero area falls back to the
 /// vertex mean of its exterior. `Error(Nil)` when the exterior is
 /// missing or empty.
-pub fn polygon(rings: List(List(Point))) -> Result(Point, Nil) {
+pub fn polygon(
+  rings: List(List(#(Float, Float))),
+) -> Result(#(Float, Float), Nil) {
   use exterior <- result.try(exterior_ring(rings))
   from_moments(polygon_moments(rings), fallback: fn() {
     mean(open_ring(exterior))
@@ -53,7 +52,9 @@ fn open_ring(ring: List(#(Float, Float))) -> List(#(Float, Float)) {
 /// The area-weighted centroid of several polygons. Polygons without an
 /// exterior ring are skipped. When the total area is zero, the result is
 /// the mean of the polygons' own centroids.
-pub fn polygons(polygons: List(List(List(Point)))) -> Result(Point, Nil) {
+pub fn polygons(
+  polygons: List(List(List(#(Float, Float)))),
+) -> Result(#(Float, Float), Nil) {
   let polygons =
     list.filter(polygons, fn(rings) { result.is_ok(exterior_ring(rings)) })
   use <- bool.guard(when: polygons == [], return: Error(Nil))
@@ -67,7 +68,9 @@ pub fn polygons(polygons: List(List(List(Point)))) -> Result(Point, Nil) {
   })
 }
 
-fn exterior_ring(rings: List(List(Point))) -> Result(List(Point), Nil) {
+fn exterior_ring(
+  rings: List(List(#(Float, Float))),
+) -> Result(List(#(Float, Float)), Nil) {
   case rings {
     [[_, ..] as exterior, ..] -> Ok(exterior)
     _ -> Error(Nil)
@@ -76,7 +79,7 @@ fn exterior_ring(rings: List(List(Point))) -> Result(List(Point), Nil) {
 
 // Whatever the winding order, the exterior counts with positive area
 // and every hole with negative area, as in GEOS / Shapely.
-fn polygon_moments(rings: List(List(Point))) -> Moments {
+fn polygon_moments(rings: List(List(#(Float, Float)))) -> Moments {
   case rings {
     [] -> Moments(0.0, 0.0, 0.0)
     [exterior, ..holes] ->
@@ -112,8 +115,8 @@ fn add_moments(a: Moments, b: Moments) -> Moments {
 
 fn from_moments(
   moments: Moments,
-  fallback fallback: fn() -> Result(Point, Nil),
-) -> Result(Point, Nil) {
+  fallback fallback: fn() -> Result(#(Float, Float), Nil),
+) -> Result(#(Float, Float), Nil) {
   let area_twice = moments.area_twice
   // Numeric test so a -0.0 total also counts as zero on Erlang.
   use <- bool.lazy_guard(
@@ -124,11 +127,11 @@ fn from_moments(
   Ok(#(moments.sum_x *. factor, moments.sum_y *. factor))
 }
 
-fn ring_moments(ring: List(Point)) -> Moments {
+fn ring_moments(ring: List(#(Float, Float))) -> Moments {
   ring_sums(ensure_closed(ring), acc: Moments(0.0, 0.0, 0.0))
 }
 
-fn ring_sums(points: List(Point), acc acc: Moments) -> Moments {
+fn ring_sums(points: List(#(Float, Float)), acc acc: Moments) -> Moments {
   case points {
     [a, b, ..rest] -> {
       let #(x0, y0) = a
@@ -147,7 +150,7 @@ fn ring_sums(points: List(Point), acc acc: Moments) -> Moments {
   }
 }
 
-fn ensure_closed(points: List(Point)) -> List(Point) {
+fn ensure_closed(points: List(#(Float, Float))) -> List(#(Float, Float)) {
   case points, list.last(points) {
     [first, ..], Ok(last) if first != last -> list.append(points, [first])
     _, _ -> points
