@@ -77,51 +77,85 @@ fn encode_unchecked(
   points points: List(LatLng),
   precision precision: Int,
 ) -> String {
-  let factor = scale_factor(precision)
-  encode_loop(points: points, factor: factor, last_lat: 0, last_lng: 0, acc: "")
+  encode_loop(
+    points: points,
+    factor: scale_factor(precision),
+    table: string.to_utf_codepoints(output_chars),
+    last_lat: 0,
+    last_lng: 0,
+    acc: [],
+  )
 }
 
+// `acc` holds the output codepoints in reverse order.
 fn encode_loop(
   points points: List(LatLng),
   factor factor: Float,
+  table table: List(UtfCodepoint),
   last_lat last_lat: Int,
   last_lng last_lng: Int,
-  acc acc: String,
+  acc acc: List(UtfCodepoint),
 ) -> String {
   case points {
-    [] -> acc
+    [] -> string.from_utf_codepoints(list.reverse(acc))
     [head, ..tail] -> {
       let lat_scaled = round_to_int(latlng.lat(head) *. factor)
       let lng_scaled = round_to_int(latlng.lng(head) *. factor)
-      let lat_delta = lat_scaled - last_lat
-      let lng_delta = lng_scaled - last_lng
+      let acc =
+        encode_signed(value: lat_scaled - last_lat, table: table, acc: acc)
+      let acc =
+        encode_signed(value: lng_scaled - last_lng, table: table, acc: acc)
       encode_loop(
         points: tail,
         factor: factor,
+        table: table,
         last_lat: lat_scaled,
         last_lng: lng_scaled,
-        acc: acc <> encode_signed(lat_delta) <> encode_signed(lng_delta),
+        acc: acc,
       )
     }
   }
 }
 
-fn encode_signed(value: Int) -> String {
+fn encode_signed(
+  value value: Int,
+  table table: List(UtfCodepoint),
+  acc acc: List(UtfCodepoint),
+) -> List(UtfCodepoint) {
   let shifted = case value < 0 {
     True -> bit_not_lower(value * 2)
     False -> value * 2
   }
-  encode_unsigned(shifted, "")
+  encode_unsigned(value: shifted, table: table, acc: acc)
 }
 
-fn encode_unsigned(value: Int, acc: String) -> String {
+fn encode_unsigned(
+  value value: Int,
+  table table: List(UtfCodepoint),
+  acc acc: List(UtfCodepoint),
+) -> List(UtfCodepoint) {
   case value >= 0x20 {
-    True -> {
-      let chunk = value % 0x20 + 0x20 + 63
-      encode_unsigned(value / 0x20, acc <> int_codepoint_to_string(chunk))
-    }
-    False -> acc <> int_codepoint_to_string(value + 63)
+    True ->
+      encode_unsigned(
+        value: value / 0x20,
+        table: table,
+        acc: push_chunk(table: table, chunk: value % 0x20 + 0x20, acc: acc),
+      )
+    False -> push_chunk(table: table, chunk: value, acc: acc)
   }
+}
+
+// Output characters are the 64 ASCII codes 63..126; chunk value `v`
+// in 0..63 is the codepoint at offset `v` of `table`.
+const output_chars: String =
+  "?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+
+fn push_chunk(
+  table table: List(UtfCodepoint),
+  chunk chunk: Int,
+  acc acc: List(UtfCodepoint),
+) -> List(UtfCodepoint) {
+  list.append(list.take(list.drop(table, chunk), 1), acc)
 }
 
 // ZigZag bit-not on the low 32 bits, which the spec calls for. We
@@ -297,11 +331,4 @@ fn scale_factor(precision: Int) -> Float {
 fn round_to_int(value: Float) -> Int {
   use <- bool.guard(when: value <. 0.0, return: -float.round(0.0 -. value))
   float.round(value)
-}
-
-fn int_codepoint_to_string(value: Int) -> String {
-  case string.utf_codepoint(value) {
-    Ok(code) -> string.from_utf_codepoints([code])
-    Error(Nil) -> ""
-  }
 }
