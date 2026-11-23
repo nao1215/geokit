@@ -318,10 +318,10 @@ pub fn decode_missing_coordinates_test() -> Nil {
 pub fn decode_invalid_position_too_few_test() -> Nil {
   parse_geometry("{\"type\":\"Point\",\"coordinates\":[1.0]}")
   |> expected
-  |> should.equal("position of 2 or 3 numbers")
-  parse_geometry("{\"type\":\"Point\",\"coordinates\":[1,2,3,4]}")
+  |> should.equal("position of at least 2 numbers")
+  parse_geometry("{\"type\":\"Point\",\"coordinates\":[]}")
   |> expected
-  |> should.equal("position of 2 or 3 numbers")
+  |> should.equal("position of at least 2 numbers")
 }
 
 pub fn decode_lat_out_of_range_test() -> Nil {
