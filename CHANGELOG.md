@@ -7,6 +7,19 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+### Changed
+
+- `geojson.feature_decoder` decodes a number id with no fractional part, such as `1.0` or `1.0e300`, to `IntId` on both targets. On Erlang `1.0` used to decode to `FloatId(1.0)` while JavaScript gave `IntId(1)`. A `FloatId` with no fractional part therefore comes back as `IntId` after encoding and decoding.
+
+### Fixed
+
+- `distance` keeps its precision near antipodal points. The haversine form could be off by up to 18 cm there, and Erlang and JavaScript returned values 13 cm apart for the same points; it now uses the Vincenty formula for a sphere, which in a differential run of 3,000 pairs stayed within 6 nanometres of GeographicLib's geodesic on the same sphere. `distance(a, b)` and `distance(b, a)` are still exactly equal.
+- `geojson.geometry_decoder` accepts positions with more than three numbers and drops the extra ones, as RFC 7946 section 3.1.1 allows, including integers too large to be coordinates. They used to fail with `position of 2 or 3 numbers`; the message for a position with fewer than two numbers is now `position of at least 2 numbers`.
+
+### Documentation
+
+- The README gave the error of the spherical model against an ellipsoidal distance as under 0.5 %. It reaches 0.56 % for short north-south distances near the equator, and the note now says under 0.6 %.
+
 ## [0.9.0] - 2026-11-22
 
 ### Breaking

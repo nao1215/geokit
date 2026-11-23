@@ -73,7 +73,7 @@ The API reference is on [HexDocs](https://hexdocs.pm/geokit/).
 
 ## Notes
 
-- Distance and bearing use a sphere with the mean Earth radius (6,371,008.8 m). The error against an ellipsoidal distance stays under 0.5 %.
+- Distance and bearing use a sphere with the mean Earth radius (6,371,008.8 m). The error against a WGS84 ellipsoidal distance stays under 0.6 %; it is largest for short north-south distances near the equator.
 - Bounding box, centroid, simplification and point-in-polygon treat longitude and latitude as a flat plane. Errors grow on shapes wider than a few degrees.
 - The planar operations do not wrap around the antimeridian. Split a shape that crosses it into a `MultiPolygon`, as RFC 7946 §3.1.9 recommends.
 
