@@ -1,13 +1,14 @@
 //// GeoJSON (RFC 7946) encoders and decoders for geokit geometries and for
 //// features with properties of your own type. Encoders return a
 //// `json.Json` for `json.to_string`, and decoders are for `json.parse`.
-//// GeoJSON writes a position as `[longitude, latitude]`; a third number
-//// (altitude) is accepted when decoding and dropped. Decoders reject
+//// GeoJSON writes a position as `[longitude, latitude]`; further numbers
+//// such as altitude are accepted when decoding and dropped. Decoders reject
 //// positions out of range, polygon rings that are open or have fewer
 //// than 4 positions, and `GeometryCollection`.
 
 import gleam/bool
 import gleam/dynamic/decode.{type Decoder}
+import gleam/float
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
@@ -227,10 +228,11 @@ fn ring_decoder() -> Decoder(List(LatLng)) {
 }
 
 fn position_decoder() -> Decoder(LatLng) {
-  use numbers <- decode.then(decode.list(number_decoder()))
+  use numbers <- decode.then(decode.list(coordinate_decoder()))
   let origin = geokit.wrap_lat_lng(latitude: 0.0, longitude: 0.0)
   case numbers {
-    [longitude, latitude] | [longitude, latitude, _] ->
+    // RFC 7946 section 3.1.1: two or more numbers.
+    [Ok(longitude), Ok(latitude), ..] ->
       case geokit.lat_lng(latitude:, longitude:) {
         Ok(point) -> decode.success(point)
         Error(geokit.LatitudeOutOfRange(_)) ->
@@ -238,8 +240,18 @@ fn position_decoder() -> Decoder(LatLng) {
         Error(geokit.LongitudeOutOfRange(_)) ->
           decode.failure(origin, "longitude in [-180, 180]")
       }
-    _ -> decode.failure(origin, "position of 2 or 3 numbers")
+    [_, _, ..] -> decode.failure(origin, "Float")
+    _ -> decode.failure(origin, "position of at least 2 numbers")
   }
+}
+
+// A number, or `Error(Nil)` for an integer too large to be a coordinate.
+// Numbers after the latitude are dropped, so only the first two have to
+// be usable as coordinates.
+fn coordinate_decoder() -> Decoder(Result(Float, Nil)) {
+  decode.one_of(decode.map(number_decoder(), Ok), [
+    decode.map(decode.int, fn(_) { Error(Nil) }),
+  ])
 }
 
 // JSON has a single number type; `1` and `1.0` are the same coordinate.
@@ -284,10 +296,11 @@ const max_integer_coordinate: Int = 1_000_000_000
 /// // -> True
 /// ```
 ///
-/// ## Target specific behavior
-///
-/// On JavaScript a number id with no fractional part, such as `1.0`,
-/// decodes to `IntId`. On Erlang `1.0` decodes to `FloatId(1.0)`.
+/// A number id with no fractional part, such as `1` or `1.0`, decodes to
+/// `IntId` on both targets, and other numbers to `FloatId`, so a
+/// `FloatId` with no fractional part comes back as `IntId`. JavaScript
+/// parses integers beyond 2^53 to the nearest float, so their `IntId`
+/// value can differ from Erlang's exact one.
 pub fn feature_decoder(
   properties properties: Decoder(p),
 ) -> Decoder(Feature(p)) {
@@ -298,11 +311,19 @@ pub fn feature_decoder(
   decode.success(Feature(geometry:, properties:, id:))
 }
 
+// JavaScript has one number type, so `decode.float` accepts `1` there
+// and `decode.int` accepts `1.0`. Trying the float first and classifying
+// it here gives both targets the same answer.
 fn id_decoder() -> Decoder(FeatureId) {
   decode.one_of(decode.map(decode.string, StringId), [
+    decode.map(decode.float, number_id),
     decode.map(decode.int, IntId),
-    decode.map(decode.float, FloatId),
   ])
+}
+
+fn number_id(value: Float) -> FeatureId {
+  use <- bool.guard(when: float.floor(value) != value, return: FloatId(value))
+  IntId(float.round(value))
 }
 
 /// Returns a decoder for a GeoJSON feature collection object, decoding

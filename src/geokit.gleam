@@ -181,8 +181,10 @@ pub fn longitude(point: LatLng) -> Float {
 
 // --- Distance and bearing -------------------------------------------------
 
-/// Returns the great-circle distance in meters, computed with the
-/// haversine formula on a sphere of radius 6,371,008.8 m.
+/// Returns the great-circle distance in meters on a sphere of radius
+/// 6,371,008.8 m. The central angle comes from the Vincenty formula for
+/// a sphere, which keeps its precision at every distance, including
+/// antipodal points where the haversine formula loses centimeters.
 ///
 /// ## Examples
 ///
@@ -193,25 +195,31 @@ pub fn longitude(point: LatLng) -> Float {
 /// // -> 402_785
 /// ```
 pub fn distance(from from: LatLng, to to: LatLng) -> Float {
-  let lat_from = maths.degrees_to_radians(from.latitude)
-  let lat_to = maths.degrees_to_radians(to.latitude)
-  let half_lat = maths.degrees_to_radians(to.latitude -. from.latitude) /. 2.0
-  let half_lng = maths.degrees_to_radians(to.longitude -. from.longitude) /. 2.0
-  let sin_half_lat = maths.sin(half_lat)
-  let sin_half_lng = maths.sin(half_lng)
-  let h =
-    sin_half_lat
-    *. sin_half_lat
-    +. maths.cos(lat_from)
-    *. maths.cos(lat_to)
-    *. sin_half_lng
-    *. sin_half_lng
-  let h = float.clamp(h, min: 0.0, max: 1.0)
-  let central_angle = 2.0 *. maths.atan2(sqrt_nonneg(h), sqrt_nonneg(1.0 -. h))
-  earth_radius_meters *. central_angle
+  // The formula is not exactly symmetric in floating point, so the two
+  // points are put in a fixed order: `distance(a, b) == distance(b, a)`.
+  let #(from, to) = case
+    from.latitude <. to.latitude
+    || { from.latitude == to.latitude && from.longitude <=. to.longitude }
+  {
+    True -> #(from, to)
+    False -> #(to, from)
+  }
+  let phi_1 = maths.degrees_to_radians(from.latitude)
+  let phi_2 = maths.degrees_to_radians(to.latitude)
+  let delta_lambda = maths.degrees_to_radians(to.longitude -. from.longitude)
+  let sin_1 = maths.sin(phi_1)
+  let cos_1 = maths.cos(phi_1)
+  let sin_2 = maths.sin(phi_2)
+  let cos_2 = maths.cos(phi_2)
+  let cos_delta = maths.cos(delta_lambda)
+  let east = cos_2 *. maths.sin(delta_lambda)
+  let north = cos_1 *. sin_2 -. sin_1 *. cos_2 *. cos_delta
+  let along = sin_1 *. sin_2 +. cos_1 *. cos_2 *. cos_delta
+  let across = sqrt_nonneg(east *. east +. north *. north)
+  earth_radius_meters *. maths.atan2(across, along)
 }
 
-// Callers pass values in [0, 1], so `float.square_root` cannot fail.
+// Callers pass non-negative values, so `float.square_root` cannot fail.
 fn sqrt_nonneg(value: Float) -> Float {
   case float.square_root(float.max(value, 0.0)) {
     Ok(root) -> root

@@ -22,7 +22,7 @@
 
 ## Differential testing
 
-`test/differential_test.gleam` checks every public function against values from independent implementations, recorded next to each assertion so they can be regenerated: Python `math` for haversine and bearing on the same radius (6,371,008.8 m), `ngeohash` for geohash, `@mapbox/polyline` for polylines, the OSM slippy-map and Bing quadkey formulas for Web Mercator, and Turf for bbox, centroid and simplify.
+`test/differential_test.gleam` checks every public function against values from independent implementations, recorded next to each assertion so they can be regenerated: Python `math` for distance and bearing on the same radius (6,371,008.8 m), `ngeohash` for geohash, `@mapbox/polyline` for polylines, the OSM slippy-map and Bing quadkey formulas for Web Mercator, and Turf for bbox, centroid and simplify. `test/regression_distance_antipodal_test.gleam` checks near-antipodal and very short distances against GeographicLib geodesics on the same sphere, to within a millimetre.
 
 ## Nightly runs
 
