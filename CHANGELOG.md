@@ -7,6 +7,8 @@ and this project is expected to follow [Semantic Versioning](https://semver.org/
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-23
+
 ### Changed
 
 - `geojson.feature_decoder` decodes a number id with no fractional part, such as `1.0` or `1.0e300`, to `IntId` on both targets. On Erlang `1.0` used to decode to `FloatId(1.0)` while JavaScript gave `IntId(1)`. A `FloatId` with no fractional part therefore comes back as `IntId` after encoding and decoding.
