@@ -29,7 +29,6 @@ import gleam/string
 import gleam_community/maths
 import metamon
 import metamon/generator
-import metamon/generator/range
 
 import geokit.{type LatLng}
 import geokit/geohash
@@ -40,8 +39,8 @@ import geokit/tile
 
 fn latlng_gen() -> generator.Generator(LatLng) {
   generator.map2(
-    generator.float(-90.0, 90.0),
-    generator.float(-180.0, 180.0),
+    generator.float(from: -90.0, to: 90.0),
+    generator.float(from: -180.0, to: 180.0),
     fn(lat, lng) {
       let assert Ok(p) = geokit.lat_lng(latitude: lat, longitude: lng)
       p
@@ -53,8 +52,8 @@ fn mid_latlng_gen() -> generator.Generator(LatLng) {
   // Latitudes well away from poles to avoid documented polar edge
   // cases in geohash neighbor traversal and mercator pole clamps.
   generator.map2(
-    generator.float(-80.0, 80.0),
-    generator.float(-179.0, 179.0),
+    generator.float(from: -80.0, to: 80.0),
+    generator.float(from: -179.0, to: 179.0),
     fn(lat, lng) {
       let assert Ok(p) = geokit.lat_lng(latitude: lat, longitude: lng)
       p
@@ -67,8 +66,8 @@ fn mercator_safe_latlng_gen() -> generator.Generator(LatLng) {
   // `from_lat_lng` clamps, so the original point intentionally
   // falls outside the returned cell.
   generator.map2(
-    generator.float(-85.0, 85.0),
-    generator.float(-179.0, 179.0),
+    generator.float(from: -85.0, to: 85.0),
+    generator.float(from: -179.0, to: 179.0),
     fn(lat, lng) {
       let assert Ok(p) = geokit.lat_lng(latitude: lat, longitude: lng)
       p
@@ -77,24 +76,24 @@ fn mercator_safe_latlng_gen() -> generator.Generator(LatLng) {
 }
 
 fn non_empty_latlng_list_gen() -> generator.Generator(List(LatLng)) {
-  generator.list_of(latlng_gen(), range.constant(1, 10))
+  generator.list_of(latlng_gen(), length: generator.range(from: 1, to: 10))
 }
 
 fn latlng_list_gen() -> generator.Generator(List(LatLng)) {
-  generator.list_of(latlng_gen(), range.constant(0, 8))
+  generator.list_of(latlng_gen(), length: generator.range(from: 0, to: 8))
 }
 
 fn precision_gen() -> generator.Generator(Int) {
-  generator.int(range.constant(1, 12))
+  generator.int(generator.range(from: 1, to: 12))
 }
 
 fn tile_gen() -> generator.Generator(tile.Tile) {
   // Zoom 1..20; zoom 0 has the empty quadkey, covered by mercator_test.
-  generator.bind(generator.int(range.constant(1, 20)), fn(z) {
+  generator.bind(generator.int(generator.range(from: 1, to: 20)), fn(z) {
     let max_coord = pow2(z) - 1
     generator.map2(
-      generator.int(range.constant(0, max_coord)),
-      generator.int(range.constant(0, max_coord)),
+      generator.int(generator.range(from: 0, to: max_coord)),
+      generator.int(generator.range(from: 0, to: max_coord)),
       fn(x, y) {
         let assert Ok(t) = tile.new(zoom: z, x: x, y: y)
         t
@@ -119,20 +118,20 @@ fn abs_diff(a: Float, b: Float) -> Float {
 
 pub fn pbt_haversine_non_negative_test() -> Nil {
   metamon.forall(generator.tuple2(latlng_gen(), latlng_gen()), fn(pair) {
-    geokit.distance(from: pair.0, to: pair.1) >=. 0.0
+    assert geokit.distance(from: pair.0, to: pair.1) >=. 0.0
   })
 }
 
 pub fn pbt_haversine_zero_for_same_point_test() -> Nil {
   metamon.forall(latlng_gen(), fn(p) {
-    geokit.distance(from: p, to: p) <=. 1.0e-6
+    assert geokit.distance(from: p, to: p) <=. 1.0e-6
   })
 }
 
 pub fn pbt_haversine_bounded_by_half_circumference_test() -> Nil {
   let max = 6_371_008.8 *. maths.pi() +. 0.001
   metamon.forall(generator.tuple2(latlng_gen(), latlng_gen()), fn(pair) {
-    geokit.distance(from: pair.0, to: pair.1) <=. max
+    assert geokit.distance(from: pair.0, to: pair.1) <=. max
   })
 }
 
@@ -142,7 +141,7 @@ pub fn pbt_distance_in_kilometers_is_meters_over_1000_test() -> Nil {
     let km = {
       geokit.distance(from: pair.0, to: pair.1) /. 1000.0
     }
-    abs_diff(m /. 1000.0, km) <=. 1.0e-9
+    assert abs_diff(m /. 1000.0, km) <=. 1.0e-9
   })
 }
 
@@ -150,7 +149,7 @@ pub fn pbt_haversine_commutative_test() -> Nil {
   let mr = metamon.commutativity_of(name: "haversine_commutative")
   metamon.forall_morph(
     generator.tuple2(latlng_gen(), latlng_gen()),
-    mr,
+    [mr],
     fn(pair) { geokit.distance(from: pair.0, to: pair.1) },
   )
 }
@@ -162,7 +161,7 @@ pub fn pbt_distance_triangle_inequality_test() -> Nil {
       let d_ab = geokit.distance(from: triple.0, to: triple.1)
       let d_bc = geokit.distance(from: triple.1, to: triple.2)
       let d_ac = geokit.distance(from: triple.0, to: triple.2)
-      d_ac <=. d_ab +. d_bc +. 0.001
+      assert d_ac <=. d_ab +. d_bc +. 0.001
     },
   )
 }
@@ -172,14 +171,16 @@ pub fn pbt_distance_triangle_inequality_test() -> Nil {
 pub fn pbt_bearing_initial_in_range_test() -> Nil {
   metamon.forall(generator.tuple2(latlng_gen(), latlng_gen()), fn(pair) {
     let value = geokit.initial_bearing(from: pair.0, to: pair.1)
-    value >=. 0.0 && value <. 360.0
+    assert value >=. 0.0
+    assert value <. 360.0
   })
 }
 
 pub fn pbt_bearing_final_in_range_test() -> Nil {
   metamon.forall(generator.tuple2(latlng_gen(), latlng_gen()), fn(pair) {
     let value = geokit.final_bearing(from: pair.0, to: pair.1)
-    value >=. 0.0 && value <. 360.0
+    assert value >=. 0.0
+    assert value <. 360.0
   })
 }
 
@@ -188,51 +189,37 @@ pub fn pbt_bearing_final_matches_reverse_initial_plus_180_test() -> Nil {
   // at b when travelling from a is anti-parallel to the heading on
   // departure from b toward a — i.e. differs by exactly 180°.
   metamon.forall(generator.tuple2(latlng_gen(), latlng_gen()), fn(pair) {
-    bearing_inverse_holds_for(pair.0, pair.1)
+    let #(a, b) = pair
+    let d = geokit.distance(from: a, to: b)
+    case d <. 19_000_000.0 && d >. 100.0 {
+      False -> Nil
+      True -> {
+        let final_ab = geokit.final_bearing(from: a, to: b)
+        let initial_ba = geokit.initial_bearing(from: b, to: a)
+        let diff_raw = abs_diff(final_ab, initial_ba)
+        assert diff_raw >=. 179.5
+        assert diff_raw <=. 180.5
+      }
+    }
   })
-}
-
-fn bearing_inverse_holds_for(a: LatLng, b: LatLng) -> Bool {
-  let d = geokit.distance(from: a, to: b)
-  case d <. 19_000_000.0 && d >. 100.0 {
-    False -> True
-    True -> bearing_diff_close_to_180(a, b)
-  }
-}
-
-fn bearing_diff_close_to_180(a: LatLng, b: LatLng) -> Bool {
-  let final_ab = geokit.final_bearing(from: a, to: b)
-  let initial_ba = geokit.initial_bearing(from: b, to: a)
-  let diff_raw = abs_diff(final_ab, initial_ba)
-  diff_raw >=. 179.5 && diff_raw <=. 180.5
 }
 
 // --- geohash properties -----------------------------------------------
 
 pub fn pbt_geohash_encoded_length_equals_precision_test() -> Nil {
   metamon.forall(generator.tuple2(latlng_gen(), precision_gen()), fn(pair) {
-    geohash_length_matches(pair.0, pair.1)
+    let #(p, prec) = pair
+    let assert Ok(hash) = geohash.encode(p, precision: prec)
+    assert string.length(hash) == prec
   })
-}
-
-fn geohash_length_matches(p: LatLng, prec: Int) -> Bool {
-  case geohash.encode(p, precision: prec) {
-    Ok(hash) -> string.length(hash) == prec
-    Error(_) -> False
-  }
 }
 
 pub fn pbt_geohash_alphabet_test() -> Nil {
   metamon.forall(generator.tuple2(latlng_gen(), precision_gen()), fn(pair) {
-    geohash_alphabet_ok(pair.0, pair.1)
+    let #(p, prec) = pair
+    let assert Ok(hash) = geohash.encode(p, precision: prec)
+    assert !contains_forbidden_chars(hash)
   })
-}
-
-fn geohash_alphabet_ok(p: LatLng, prec: Int) -> Bool {
-  case geohash.encode(p, precision: prec) {
-    Ok(hash) -> !contains_forbidden_chars(hash)
-    Error(_) -> False
-  }
 }
 
 fn contains_forbidden_chars(hash: String) -> Bool {
@@ -245,22 +232,11 @@ fn contains_forbidden_chars(hash: String) -> Bool {
 
 pub fn pbt_geohash_decode_bounds_contains_original_test() -> Nil {
   metamon.forall(generator.tuple2(latlng_gen(), precision_gen()), fn(pair) {
-    geohash_bounds_contain(pair.0, pair.1)
+    let #(p, prec) = pair
+    let assert Ok(hash) = geohash.encode(p, precision: prec)
+    let assert Ok(#(sw, ne)) = geohash_bounds(hash)
+    assert bbox_contains(sw, ne, p)
   })
-}
-
-fn geohash_bounds_contain(p: LatLng, prec: Int) -> Bool {
-  case geohash.encode(p, precision: prec) {
-    Error(_) -> False
-    Ok(hash) -> check_geohash_bounds(hash, p)
-  }
-}
-
-fn check_geohash_bounds(hash: String, p: LatLng) -> Bool {
-  case geohash_bounds(hash) {
-    Error(_) -> False
-    Ok(pair) -> bbox_contains(pair.0, pair.1, p)
-  }
 }
 
 fn bbox_contains(sw: LatLng, ne: LatLng, p: LatLng) -> Bool {
@@ -272,145 +248,97 @@ fn bbox_contains(sw: LatLng, ne: LatLng, p: LatLng) -> Bool {
 
 pub fn pbt_geohash_case_insensitive_decode_test() -> Nil {
   metamon.forall(generator.tuple2(latlng_gen(), precision_gen()), fn(pair) {
-    geohash_case_agreement(pair.0, pair.1)
+    let #(p, prec) = pair
+    let assert Ok(hash) = geohash.encode(p, precision: prec)
+    let assert Ok(lower) = geohash.decode(hash)
+    assert geohash.decode(string.uppercase(hash)) == Ok(lower)
   })
-}
-
-fn geohash_case_agreement(p: LatLng, prec: Int) -> Bool {
-  case geohash.encode(p, precision: prec) {
-    Error(_) -> False
-    Ok(hash) -> decode_lower_equals_upper(hash)
-  }
-}
-
-fn decode_lower_equals_upper(hash: String) -> Bool {
-  let upper = string.uppercase(hash)
-  case geohash.decode(hash), geohash.decode(upper) {
-    Ok(lo), Ok(up) -> lo == up
-    _, _ -> False
-  }
 }
 
 pub fn pbt_geohash_neighbors_preserve_length_test() -> Nil {
   metamon.forall(generator.tuple2(latlng_gen(), precision_gen()), fn(pair) {
-    geohash_neighbors_length_ok(pair.0, pair.1)
+    let #(p, prec) = pair
+    let assert Ok(hash) = geohash.encode(p, precision: prec)
+    case geohash.neighbors(hash) {
+      // Cells in the polar rows have no neighbor on one side.
+      Error(error) -> {
+        assert error == geohash.NoNeighborBeyondPole
+      }
+      Ok(n) -> {
+        assert string.length(n.north) == prec
+        assert string.length(n.east) == prec
+        assert string.length(n.south) == prec
+        assert string.length(n.west) == prec
+      }
+    }
   })
-}
-
-fn geohash_neighbors_length_ok(p: LatLng, prec: Int) -> Bool {
-  case geohash.encode(p, precision: prec) {
-    Error(_) -> False
-    Ok(hash) -> neighbors_all_length(hash, prec)
-  }
-}
-
-fn neighbors_all_length(hash: String, prec: Int) -> Bool {
-  case geohash.neighbors(hash) {
-    // Cells in the polar rows have no neighbor on one side.
-    Error(geohash.NoNeighborBeyondPole) -> True
-    Error(_) -> False
-    Ok(n) ->
-      string.length(n.north) == prec
-      && string.length(n.east) == prec
-      && string.length(n.south) == prec
-      && string.length(n.west) == prec
-  }
 }
 
 pub fn pbt_geohash_east_then_west_round_trip_test() -> Nil {
   metamon.forall(generator.tuple2(mid_latlng_gen(), precision_gen()), fn(pair) {
-    east_west_round_trip_ok(pair.0, pair.1)
+    let #(p, prec) = pair
+    let assert Ok(start) = geohash.encode(p, precision: prec)
+    case geohash.neighbor(start, toward: geohash.East) {
+      Error(_) -> Nil
+      Ok(east) ->
+        case geohash.neighbor(east, toward: geohash.West) {
+          Error(_) -> Nil
+          Ok(back) -> {
+            assert back == start
+          }
+        }
+    }
   })
-}
-
-fn east_west_round_trip_ok(p: LatLng, prec: Int) -> Bool {
-  case geohash.encode(p, precision: prec) {
-    Error(_) -> False
-    Ok(start) -> step_east_then_west(start)
-  }
-}
-
-fn step_east_then_west(start: String) -> Bool {
-  case geohash.neighbor(start, toward: geohash.East) {
-    Error(_) -> True
-    Ok(east) -> step_back_west(east, start)
-  }
-}
-
-fn step_back_west(east: String, start: String) -> Bool {
-  case geohash.neighbor(east, toward: geohash.West) {
-    Error(_) -> True
-    Ok(back) -> back == start
-  }
 }
 
 pub fn pbt_geohash_precision_prefix_test() -> Nil {
   // Encoding at precision N must yield a prefix of the encoding at
   // precision N+1 — geohash cells nest.
   metamon.forall(
-    generator.tuple2(latlng_gen(), generator.int(range.constant(1, 11))),
-    fn(pair) { geohash_prefix_nests(pair.0, pair.1) },
+    generator.tuple2(
+      latlng_gen(),
+      generator.int(generator.range(from: 1, to: 11)),
+    ),
+    fn(pair) {
+      let #(p, n) = pair
+      let assert Ok(short) = geohash.encode(p, precision: n)
+      let assert Ok(long) = geohash.encode(p, precision: n + 1)
+      assert string.starts_with(long, short)
+    },
   )
-}
-
-fn geohash_prefix_nests(p: LatLng, n: Int) -> Bool {
-  case geohash.encode(p, precision: n), geohash.encode(p, precision: n + 1) {
-    Ok(short), Ok(long) -> string.starts_with(long, short)
-    _, _ -> False
-  }
 }
 
 // --- polyline codec ---------------------------------------------------
 
 pub fn pbt_polyline_round_trip_precision_5_test() -> Nil {
   metamon.forall(latlng_list_gen(), fn(points) {
-    polyline_round_trips(points, 5, 1.0e-5)
+    let assert Ok(encoded) = polyline.encode(points, precision: 5)
+    let assert Ok(decoded) = polyline.decode(encoded, precision: 5)
+    assert lists_close_enough(points, decoded, 1.0e-5)
   })
 }
 
 pub fn pbt_polyline_round_trip_precision_6_test() -> Nil {
   metamon.forall(latlng_list_gen(), fn(points) {
-    polyline_round_trips(points, 6, 1.0e-6)
+    let assert Ok(encoded) = polyline.encode(points, precision: 6)
+    let assert Ok(decoded) = polyline.decode(encoded, precision: 6)
+    assert lists_close_enough(points, decoded, 1.0e-6)
   })
-}
-
-fn polyline_round_trips(
-  points: List(LatLng),
-  precision: Int,
-  tol: Float,
-) -> Bool {
-  case polyline.encode(points, precision: precision) {
-    Error(_) -> False
-    Ok(encoded) ->
-      case polyline.decode(encoded, precision: precision) {
-        Error(_) -> False
-        Ok(decoded) -> lists_close_enough(points, decoded, tol)
-      }
-  }
 }
 
 pub fn pbt_polyline_decode_round_trip_length_test() -> Nil {
   metamon.forall(latlng_list_gen(), fn(points) {
-    polyline_round_trip_keeps_length(points)
+    let encoded = encode5(points)
+    let assert Ok(decoded) = polyline.decode(encoded, precision: 5)
+    assert list.length(decoded) == list.length(points)
   })
-}
-
-fn polyline_round_trip_keeps_length(points: List(LatLng)) -> Bool {
-  let encoded = encode5(points)
-  case polyline.decode(encoded, precision: 5) {
-    Error(_) -> False
-    Ok(decoded) -> list.length(decoded) == list.length(points)
-  }
 }
 
 pub fn pbt_polyline_encode_default_matches_precision_5_test() -> Nil {
   metamon.forall(
-    generator.list_of(latlng_gen(), range.constant(0, 6)),
+    generator.list_of(latlng_gen(), length: generator.range(from: 0, to: 6)),
     fn(points) {
-      case polyline.encode(points, precision: 5) {
-        Ok(encoded) -> encode5(points) == encoded
-        Error(_) -> False
-      }
+      assert polyline.encode(points, precision: 5) == Ok(encode5(points))
     },
   )
 }
@@ -449,37 +377,31 @@ fn compare_head_and_recurse(
 // --- mercator codec ----------------------------------------------------
 
 pub fn pbt_mercator_quadkey_round_trip_test() -> Nil {
-  metamon.forall(tile_gen(), fn(t) { quadkey_round_trip_ok(t) })
-}
-
-fn quadkey_round_trip_ok(t: tile.Tile) -> Bool {
-  let qk = tile.to_quadkey(t)
-  case tile.from_quadkey(qk) {
-    Ok(decoded) ->
-      tile.zoom(decoded) == tile.zoom(t)
-      && tile.x(decoded) == tile.x(t)
-      && tile.y(decoded) == tile.y(t)
-    Error(_) -> False
-  }
+  metamon.forall(tile_gen(), fn(t) {
+    let assert Ok(decoded) = tile.from_quadkey(tile.to_quadkey(t))
+    assert tile.zoom(decoded) == tile.zoom(t)
+    assert tile.x(decoded) == tile.x(t)
+    assert tile.y(decoded) == tile.y(t)
+  })
 }
 
 pub fn pbt_mercator_from_lat_lng_preserves_zoom_test() -> Nil {
   metamon.forall(
-    generator.tuple2(latlng_gen(), generator.int(range.constant(0, 20))),
-    fn(pair) { from_lat_lng_preserves_zoom(pair.0, pair.1) },
+    generator.tuple2(
+      latlng_gen(),
+      generator.int(generator.range(from: 0, to: 20)),
+    ),
+    fn(pair) {
+      let #(p, z) = pair
+      let assert Ok(t) = tile.from_lat_lng(p, zoom: z)
+      assert tile.zoom(t) == z
+    },
   )
-}
-
-fn from_lat_lng_preserves_zoom(p: LatLng, z: Int) -> Bool {
-  case tile.from_lat_lng(p, zoom: z) {
-    Ok(t) -> tile.zoom(t) == z
-    Error(_) -> False
-  }
 }
 
 pub fn pbt_mercator_quadkey_length_equals_zoom_test() -> Nil {
   metamon.forall(tile_gen(), fn(t) {
-    string.length(tile.to_quadkey(t)) == tile.zoom(t)
+    assert string.length(tile.to_quadkey(t)) == tile.zoom(t)
   })
 }
 
@@ -487,177 +409,110 @@ pub fn pbt_mercator_lat_lng_round_trip_within_tile_test() -> Nil {
   metamon.forall(
     generator.tuple2(
       mercator_safe_latlng_gen(),
-      generator.int(range.constant(0, 18)),
+      generator.int(generator.range(from: 0, to: 18)),
     ),
-    fn(pair) { round_trip_within_tile_ok(pair.0, pair.1) },
+    fn(pair) {
+      let #(p, z) = pair
+      let assert Ok(t) = tile.from_lat_lng(p, zoom: z)
+      let nw = north_west(t)
+      let #(south_west, north_east) = tile_bounds(t)
+      assert geokit.latitude(south_west) -. 0.0001 <=. geokit.latitude(p)
+      assert geokit.latitude(p) <=. geokit.latitude(nw) +. 0.0001
+      assert geokit.longitude(nw) -. 0.0001 <=. geokit.longitude(p)
+      assert geokit.longitude(p) <=. geokit.longitude(north_east) +. 0.0001
+    },
   )
-}
-
-fn round_trip_within_tile_ok(p: LatLng, z: Int) -> Bool {
-  case tile.from_lat_lng(p, zoom: z) {
-    Error(_) -> False
-    Ok(t) -> tile_contains(t, p)
-  }
-}
-
-fn tile_contains(t: tile.Tile, p: LatLng) -> Bool {
-  let nw = north_west(t)
-  let pair = tile_bounds(t)
-  let lat_in =
-    geokit.latitude(pair.0) -. 0.0001 <=. geokit.latitude(p)
-    && geokit.latitude(p) <=. geokit.latitude(nw) +. 0.0001
-  let lng_in =
-    geokit.longitude(nw) -. 0.0001 <=. geokit.longitude(p)
-    && geokit.longitude(p) <=. geokit.longitude(pair.1) +. 0.0001
-  lat_in && lng_in
 }
 
 // --- bbox properties ---------------------------------------------------
 
 pub fn pbt_bbox_sw_le_ne_test() -> Nil {
   metamon.forall(non_empty_latlng_list_gen(), fn(points) {
-    bbox_well_ordered(points)
+    let assert Ok(#(sw, ne)) = bbox(geokit.LineString(points))
+    assert geokit.latitude(sw) <=. geokit.latitude(ne)
+    assert geokit.longitude(sw) <=. geokit.longitude(ne)
   })
-}
-
-fn bbox_well_ordered(points: List(LatLng)) -> Bool {
-  case bbox(geokit.LineString(points)) {
-    Error(_) -> False
-    Ok(pair) ->
-      geokit.latitude(pair.0) <=. geokit.latitude(pair.1)
-      && geokit.longitude(pair.0) <=. geokit.longitude(pair.1)
-  }
 }
 
 pub fn pbt_bbox_contains_every_point_test() -> Nil {
   metamon.forall(non_empty_latlng_list_gen(), fn(points) {
-    bbox_contains_all(points)
+    let assert Ok(#(sw, ne)) = bbox(geokit.LineString(points))
+    list.each(points, fn(p) {
+      assert bbox_contains(sw, ne, p)
+    })
   })
-}
-
-fn bbox_contains_all(points: List(LatLng)) -> Bool {
-  case bbox(geokit.LineString(points)) {
-    Error(_) -> False
-    Ok(pair) -> list.all(points, bbox_contains_fn(pair.0, pair.1))
-  }
-}
-
-fn bbox_contains_fn(sw: LatLng, ne: LatLng) -> fn(LatLng) -> Bool {
-  fn(p) { bbox_contains(sw, ne, p) }
 }
 
 pub fn pbt_bbox_invariant_under_reverse_test() -> Nil {
+  // The bounds are compared with `==` on their coordinates, as before.
   metamon.forall(non_empty_latlng_list_gen(), fn(points) {
-    bbox_reverse_invariant(points)
+    let assert Ok(#(sw1, ne1)) = bbox(geokit.LineString(points))
+    let assert Ok(#(sw2, ne2)) = bbox(geokit.LineString(list.reverse(points)))
+    assert geokit.latitude(sw1) == geokit.latitude(sw2)
+    assert geokit.longitude(sw1) == geokit.longitude(sw2)
+    assert geokit.latitude(ne1) == geokit.latitude(ne2)
+    assert geokit.longitude(ne1) == geokit.longitude(ne2)
   })
-}
-
-fn bbox_reverse_invariant(points: List(LatLng)) -> Bool {
-  let original = geokit.LineString(points)
-  let reversed = geokit.LineString(list.reverse(points))
-  case bbox(original), bbox(reversed) {
-    Ok(a), Ok(b) -> bbox_equal(a.0, a.1, b.0, b.1)
-    _, _ -> False
-  }
-}
-
-fn bbox_equal(sw1: LatLng, ne1: LatLng, sw2: LatLng, ne2: LatLng) -> Bool {
-  geokit.latitude(sw1) == geokit.latitude(sw2)
-  && geokit.longitude(sw1) == geokit.longitude(sw2)
-  && geokit.latitude(ne1) == geokit.latitude(ne2)
-  && geokit.longitude(ne1) == geokit.longitude(ne2)
 }
 
 // --- centroid properties ----------------------------------------------
 
 pub fn pbt_centroid_inside_bbox_test() -> Nil {
   metamon.forall(non_empty_latlng_list_gen(), fn(points) {
-    centroid_within_bbox(points)
+    let geom = geokit.LineString(points)
+    let assert Ok(#(sw, ne)) = bbox(geom)
+    let assert Ok(c) = geokit.centroid(geom)
+    assert bbox_contains(sw, ne, c)
   })
-}
-
-fn centroid_within_bbox(points: List(LatLng)) -> Bool {
-  let geom = geokit.LineString(points)
-  case bbox(geom), geokit.centroid(geom) {
-    Ok(pair), Ok(c) -> bbox_contains(pair.0, pair.1, c)
-    _, _ -> False
-  }
 }
 
 pub fn pbt_centroid_of_single_point_is_point_test() -> Nil {
   metamon.forall(latlng_gen(), fn(p) {
-    case geokit.centroid(geokit.Point(p)) {
-      Ok(c) -> c == p
-      Error(_) -> False
-    }
+    assert geokit.centroid(geokit.Point(p)) == Ok(p)
   })
 }
 
 // --- simplify properties ----------------------------------------------
 
 pub fn pbt_simplify_length_does_not_grow_test() -> Nil {
-  let tolerance_gen = generator.float(0.0, 1.0)
+  let tolerance_gen = generator.float(from: 0.0, to: 1.0)
   metamon.forall(
     generator.tuple2(non_empty_latlng_list_gen(), tolerance_gen),
-    fn(pair) { simplify_does_not_grow(pair.0, pair.1) },
+    fn(pair) {
+      let #(points, tolerance) = pair
+      let assert Ok(out) = simplify_line(points, tolerance: tolerance)
+      assert list.length(out) <= list.length(points)
+    },
   )
-}
-
-fn simplify_does_not_grow(points: List(LatLng), tolerance: Float) -> Bool {
-  case simplify_line(points, tolerance: tolerance) {
-    Ok(out) -> list.length(out) <= list.length(points)
-    Error(_) -> False
-  }
 }
 
 pub fn pbt_simplify_preserves_endpoints_test() -> Nil {
   // For 3+ points the first and last of the simplified line must
   // equal the first and last of the input.
-  let three_plus = generator.list_of(latlng_gen(), range.constant(3, 10))
-  let tolerance_gen = generator.float(0.0001, 0.5)
+  let three_plus =
+    generator.list_of(latlng_gen(), length: generator.range(from: 3, to: 10))
+  let tolerance_gen = generator.float(from: 0.0001, to: 0.5)
   metamon.forall(generator.tuple2(three_plus, tolerance_gen), fn(pair) {
-    simplify_keeps_endpoints(pair.0, pair.1)
+    let #(points, tolerance) = pair
+    let assert Ok(out) = simplify_line(points, tolerance: tolerance)
+    let assert Ok(first) = list.first(points)
+    let assert Ok(last) = list.last(points)
+    assert list.first(out) == Ok(first)
+    assert list.last(out) == Ok(last)
   })
-}
-
-fn simplify_keeps_endpoints(points: List(LatLng), tolerance: Float) -> Bool {
-  case
-    list.first(points),
-    list.last(points),
-    simplify_line(points, tolerance: tolerance)
-  {
-    Ok(first), Ok(last), Ok(out) -> endpoints_match(first, last, out)
-    _, _, _ -> False
-  }
-}
-
-fn endpoints_match(first: LatLng, last: LatLng, out: List(LatLng)) -> Bool {
-  case list.first(out), list.last(out) {
-    Ok(of), Ok(ol) -> of == first && ol == last
-    _, _ -> False
-  }
 }
 
 pub fn pbt_simplify_idempotent_at_fixed_tolerance_test() -> Nil {
   // Douglas-Peucker is idempotent at a fixed tolerance: a second
   // pass cannot drop further points because the surviving
   // distances are already ≤ tolerance.
-  let three_plus = generator.list_of(latlng_gen(), range.constant(3, 12))
-  metamon.forall(three_plus, fn(points) { simplify_is_idempotent(points) })
-}
-
-fn simplify_is_idempotent(points: List(LatLng)) -> Bool {
-  case simplify_line(points, tolerance: 0.1) {
-    Error(_) -> False
-    Ok(once) -> simplify_again_same_length(once)
-  }
-}
-
-fn simplify_again_same_length(once: List(LatLng)) -> Bool {
-  case simplify_line(once, tolerance: 0.1) {
-    Error(_) -> False
-    Ok(twice) -> list.length(twice) == list.length(once)
-  }
+  let three_plus =
+    generator.list_of(latlng_gen(), length: generator.range(from: 3, to: 12))
+  metamon.forall(three_plus, fn(points) {
+    let assert Ok(once) = simplify_line(points, tolerance: 0.1)
+    let assert Ok(twice) = simplify_line(once, tolerance: 0.1)
+    assert list.length(twice) == list.length(once)
+  })
 }
 
 // --- API adapters ----------------------------------------------------------

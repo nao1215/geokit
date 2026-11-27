@@ -307,3 +307,12 @@ pub fn decode_rejects_longitude_beyond_antimeridian_test() -> Nil {
   polyline.decode(input, precision: 5)
   |> should.equal(Error(polyline.CoordinateOutOfRange(index: 2)))
 }
+
+// --- Boundaries found by mutation testing ---------------------------------
+
+pub fn precision_1_is_accepted_test() -> Nil {
+  let point = geokit.wrap_lat_lng(latitude: 1.0, longitude: 2.0)
+  assert polyline.encode([point], precision: 1) == Ok("Sg@")
+  assert polyline.decode("CE", precision: 1)
+    == Ok([geokit.wrap_lat_lng(latitude: 0.2, longitude: 0.3)])
+}

@@ -1746,3 +1746,30 @@ pub fn locate_in_multi_line_string_is_an_error_test() -> Nil {
   )
   |> should.equal(Error(Nil))
 }
+
+// --- Boundaries found by mutation testing ---------------------------------
+
+fn tie_point(lat: Float, lng: Float) -> LatLng {
+  geokit.wrap_lat_lng(latitude: lat, longitude: lng)
+}
+
+pub fn simplify_splits_at_the_earliest_of_two_farthest_points_test() -> Nil {
+  // Both middle points are 1 degree from the chord. Splitting at the
+  // first one leaves the second 0.447 from its chord, below the
+  // tolerance; splitting at the second would keep the second instead.
+  let a = tie_point(0.0, 0.0)
+  let first = tie_point(1.0, 1.0)
+  let second = tie_point(1.0, 2.0)
+  let b = tie_point(0.0, 3.0)
+  assert geokit.simplify(
+      geokit.LineString([a, first, second, b]),
+      tolerance: 0.5,
+    )
+    == Ok(geokit.LineString([a, first, b]))
+  let c = tie_point(-2.0, 1.5)
+  assert geokit.simplify(
+      geokit.Polygon([[a, first, second, b, c, a]]),
+      tolerance: 0.5,
+    )
+    == Ok(geokit.Polygon([[a, first, b, c, a]]))
+}

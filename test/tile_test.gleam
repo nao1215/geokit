@@ -225,3 +225,16 @@ fn north_west(t: tile.Tile) -> LatLng {
     longitude: geokit.longitude(box.south_west),
   )
 }
+
+// --- Boundaries found by mutation testing ---------------------------------
+
+pub fn new_accepts_zoom_30_test() -> Nil {
+  let assert Ok(t) = tile.new(zoom: 30, x: 0, y: 0)
+  assert tile.zoom(t) == 30
+}
+
+pub fn from_lat_lng_keeps_the_antimeridian_in_the_last_column_test() -> Nil {
+  let point = geokit.wrap_lat_lng(latitude: 0.0, longitude: 180.0)
+  let assert Ok(t) = tile.from_lat_lng(point, zoom: 1)
+  assert tile.x(t) == 1
+}

@@ -25,14 +25,14 @@ import gleam/list
 import gleam/result
 import metamon
 import metamon/generator.{type Generator}
-import metamon/generator/range
 
 import geokit.{type LatLng, type Location, Inside, OnBoundary, Outside}
 
 // --- Generators ----------------------------------------------------------
 
 fn whole_degrees(lo: Int, hi: Int) -> Generator(Float) {
-  generator.int(range.constant(lo, hi)) |> generator.map(int.to_float)
+  generator.int(generator.range(from: lo, to: hi))
+  |> generator.map(int.to_float)
 }
 
 /// Points on a whole-degree grid well inside the valid domain, so a
@@ -46,12 +46,12 @@ fn grid_point_gen() -> Generator(LatLng) {
 /// Arbitrary rings: unclosed, possibly self-intersecting, possibly
 /// with repeated or collinear vertices.
 fn ring_gen() -> Generator(List(LatLng)) {
-  generator.list_of(grid_point_gen(), range.constant(3, 8))
+  generator.list_of(grid_point_gen(), length: generator.range(from: 3, to: 8))
 }
 
 /// An exterior ring plus zero to two arbitrary hole rings.
 fn rings_gen() -> Generator(List(List(LatLng))) {
-  generator.list_of(ring_gen(), range.constant(1, 3))
+  generator.list_of(ring_gen(), length: generator.range(from: 1, to: 3))
 }
 
 fn offset_gen() -> Generator(#(Float, Float)) {
@@ -128,8 +128,8 @@ pub fn pbt_translation_invariant_test() -> Nil {
     fn(input) {
       let #(rings, point, offset) = input
       let shift = translate_by(offset)
-      locate_in(rings, point)
-      == locate_in(map_rings(rings, shift), shift(point))
+      assert locate_in(rings, point)
+        == locate_in(map_rings(rings, shift), shift(point))
     },
   )
 }
@@ -140,15 +140,17 @@ pub fn pbt_mirror_invariant_test() -> Nil {
   metamon.forall(generator.tuple2(rings_gen(), grid_point_gen()), fn(input) {
     let #(rings, point) = input
     let original = locate_in(rings, point)
-    original == locate_in(map_rings(rings, mirror), mirror(point))
-    && original == locate_in(map_rings(rings, mirror_lng), mirror_lng(point))
+    assert original == locate_in(map_rings(rings, mirror), mirror(point))
+    assert original
+      == locate_in(map_rings(rings, mirror_lng), mirror_lng(point))
   })
 }
 
 pub fn pbt_orientation_invariant_test() -> Nil {
   metamon.forall(generator.tuple2(rings_gen(), grid_point_gen()), fn(input) {
     let #(rings, point) = input
-    locate_in(rings, point) == locate_in(list.map(rings, list.reverse), point)
+    assert locate_in(rings, point)
+      == locate_in(list.map(rings, list.reverse), point)
   })
 }
 
@@ -157,12 +159,12 @@ pub fn pbt_start_vertex_invariant_test() -> Nil {
     generator.tuple3(
       rings_gen(),
       grid_point_gen(),
-      generator.int(range.constant(0, 7)),
+      generator.int(generator.range(from: 0, to: 7)),
     ),
     fn(input) {
       let #(rings, point, shift) = input
       let rotated = list.map(rings, fn(ring) { rotate(ring, shift) })
-      locate_in(rings, point) == locate_in(rotated, point)
+      assert locate_in(rings, point) == locate_in(rotated, point)
     },
   )
 }
@@ -170,7 +172,7 @@ pub fn pbt_start_vertex_invariant_test() -> Nil {
 pub fn pbt_closing_vertex_invariant_test() -> Nil {
   metamon.forall(generator.tuple2(rings_gen(), grid_point_gen()), fn(input) {
     let #(rings, point) = input
-    locate_in(rings, point) == locate_in(list.map(rings, close), point)
+    assert locate_in(rings, point) == locate_in(list.map(rings, close), point)
   })
 }
 
@@ -178,7 +180,9 @@ pub fn pbt_closing_vertex_invariant_test() -> Nil {
 
 pub fn pbt_vertices_are_on_boundary_test() -> Nil {
   metamon.forall(ring_gen(), fn(ring) {
-    list.all(ring, fn(vertex) { locate_in([ring], vertex) == OnBoundary })
+    list.each(ring, fn(vertex) {
+      assert locate_in([ring], vertex) == OnBoundary
+    })
   })
 }
 
@@ -186,8 +190,8 @@ pub fn pbt_edge_midpoints_are_on_boundary_test() -> Nil {
   // Includes the implicit closing edge from the last vertex back to
   // the first.
   metamon.forall(ring_gen(), fn(ring) {
-    list.all(edges(ring), fn(edge) {
-      locate_in([ring], midpoint(edge.0, edge.1)) == OnBoundary
+    list.each(edges(ring), fn(edge) {
+      assert locate_in([ring], midpoint(edge.0, edge.1)) == OnBoundary
     })
   })
 }
@@ -196,9 +200,16 @@ pub fn pbt_outside_bbox_is_outside_test() -> Nil {
   metamon.forall(generator.tuple2(rings_gen(), grid_point_gen()), fn(input) {
     let #(rings, point) = input
     case bbox(geokit.Polygon(rings)) {
-      Error(Nil) -> locate_in(rings, point) == Outside
+      Error(Nil) -> {
+        assert locate_in(rings, point) == Outside
+      }
       Ok(#(sw, ne)) ->
-        within(point, sw, ne) || locate_in(rings, point) == Outside
+        case within(point, sw, ne) {
+          True -> Nil
+          False -> {
+            assert locate_in(rings, point) == Outside
+          }
+        }
     }
   })
 }
@@ -214,7 +225,8 @@ pub fn pbt_contains_is_locate_with_boundary_test() -> Nil {
   metamon.forall(generator.tuple2(rings_gen(), grid_point_gen()), fn(input) {
     let #(rings, point) = input
     let polygon = geokit.Polygon(rings)
-    contains_point(point, in: polygon) == Ok(locate_in(rings, point) != Outside)
+    assert contains_point(point, in: polygon)
+      == Ok(locate_in(rings, point) != Outside)
   })
 }
 
@@ -223,8 +235,8 @@ pub fn pbt_contains_is_locate_with_boundary_test() -> Nil {
 pub fn pbt_single_member_multipolygon_matches_polygon_test() -> Nil {
   metamon.forall(generator.tuple2(rings_gen(), grid_point_gen()), fn(input) {
     let #(rings, point) = input
-    geokit.locate(point, in: geokit.MultiPolygon([rings]))
-    == Ok(locate_in(rings, point))
+    assert geokit.locate(point, in: geokit.MultiPolygon([rings]))
+      == Ok(locate_in(rings, point))
   })
 }
 
@@ -237,7 +249,7 @@ pub fn pbt_multipolygon_contains_is_union_test() -> Nil {
       let expected =
         locate_in(first, point) != Outside
         || locate_in(second, point) != Outside
-      contains_point(point, in: union) == Ok(expected)
+      assert contains_point(point, in: union) == Ok(expected)
     },
   )
 }
@@ -247,8 +259,8 @@ pub fn pbt_multipolygon_member_order_invariant_test() -> Nil {
     generator.tuple3(rings_gen(), rings_gen(), grid_point_gen()),
     fn(input) {
       let #(first, second, point) = input
-      geokit.locate(point, in: geokit.MultiPolygon([first, second]))
-      == geokit.locate(point, in: geokit.MultiPolygon([second, first]))
+      assert geokit.locate(point, in: geokit.MultiPolygon([first, second]))
+        == geokit.locate(point, in: geokit.MultiPolygon([second, first]))
     },
   )
 }
@@ -338,7 +350,8 @@ pub fn pbt_rectangle_with_hole_matches_oracle_test() -> Nil {
         False -> fn(ring) { ring }
       }
       let rings = [orient(rect_ring(exterior)), orient(rect_ring(hole))]
-      locate_in(rings, point) == rect_with_hole_location(exterior, hole, point)
+      assert locate_in(rings, point)
+        == rect_with_hole_location(exterior, hole, point)
     },
   )
 }
@@ -372,7 +385,7 @@ pub fn pbt_diamond_matches_oracle_test() -> Nil {
         False, True -> OnBoundary
         False, False -> Outside
       }
-      locate_in([ring], point) == expected
+      assert locate_in([ring], point) == expected
     },
   )
 }
