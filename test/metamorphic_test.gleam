@@ -19,9 +19,6 @@ import gleam/list
 import gleam/string
 import metamon
 import metamon/generator
-import metamon/generator/range
-import metamon/relation
-import metamon/transform
 
 import geokit.{type LatLng}
 import geokit/tile
@@ -31,8 +28,8 @@ type Pair =
 
 fn point() -> generator.Generator(LatLng) {
   generator.map2(
-    generator.float(-90.0, 90.0),
-    generator.float(-180.0, 180.0),
+    generator.float(from: -90.0, to: 90.0),
+    generator.float(from: -180.0, to: 180.0),
     fn(lat, lng) { geokit.wrap_lat_lng(latitude: lat, longitude: lng) },
   )
 }
@@ -71,8 +68,8 @@ fn both(f: fn(LatLng) -> LatLng) -> fn(Pair) -> Pair {
 /// absolute part covers the poles, where cos(90 degrees) is about 6e-17
 /// rather than 0 and two spellings of the same pole are a few millimeters
 /// apart.
-fn close_meters() -> relation.Relation(Float) {
-  relation.new("within 1 cm or 1e-9 relative", fn(a, b) {
+fn close_meters() -> metamon.Relation(Float) {
+  metamon.Relation(name: "within 1 cm or 1e-9 relative", holds: fn(a, b) {
     let diff = float.absolute_value(a -. b)
     diff <=. 1.0e-2 || diff <=. 1.0e-9 *. float.max(a, b)
   })
@@ -83,27 +80,39 @@ pub fn distance_is_invariant_under_shared_moves_test() -> Nil {
   let haversine = fn(input: Pair) {
     geokit.distance(from: input.0, to: input.1)
   }
-  metamon.forall_morphs(
+  metamon.forall_morph(
     pair(),
     [
-      metamon.mr(
+      metamon.Morph(
         name: "shift both longitudes by 37.5",
-        transform: transform.new("shift 37.5", both(shift_lng(_, 37.5))),
+        transform: metamon.Transform(
+          name: "shift 37.5",
+          apply: both(shift_lng(_, 37.5)),
+        ),
         relation: rel,
       ),
-      metamon.mr(
+      metamon.Morph(
         name: "shift both longitudes by -123.25",
-        transform: transform.new("shift -123.25", both(shift_lng(_, -123.25))),
+        transform: metamon.Transform(
+          name: "shift -123.25",
+          apply: both(shift_lng(_, -123.25)),
+        ),
         relation: rel,
       ),
-      metamon.mr(
+      metamon.Morph(
         name: "mirror both across the equator",
-        transform: transform.new("mirror lat", both(mirror_lat)),
+        transform: metamon.Transform(
+          name: "mirror lat",
+          apply: both(mirror_lat),
+        ),
         relation: rel,
       ),
-      metamon.mr(
+      metamon.Morph(
         name: "mirror both across the prime meridian",
-        transform: transform.new("mirror lng", both(mirror_lng)),
+        transform: metamon.Transform(
+          name: "mirror lng",
+          apply: both(mirror_lng),
+        ),
         relation: rel,
       ),
     ],
@@ -134,8 +143,8 @@ fn normalize(b: Float) -> Float {
 fn bearing_pair() -> generator.Generator(Pair) {
   let p =
     generator.map2(
-      generator.float(-80.0, 80.0),
-      generator.float(-180.0, 180.0),
+      generator.float(from: -80.0, to: 80.0),
+      generator.float(from: -180.0, to: 180.0),
       fn(lat, lng) { geokit.wrap_lat_lng(latitude: lat, longitude: lng) },
     )
   generator.tuple2(p, p)
@@ -150,22 +159,27 @@ pub fn bearing_mirrors_with_the_points_test() -> Nil {
     geokit.initial_bearing(from: input.0, to: input.1)
   }
   let close =
-    relation.new("same direction within 1e-6 degrees", fn(a, b) {
-      angle_between(a, b) <=. 1.0e-6
-    })
-  metamon.forall_morphs(
+    metamon.Relation(
+      name: "same direction within 1e-6 degrees",
+      holds: fn(a, b) { angle_between(a, b) <=. 1.0e-6 },
+    )
+  metamon.forall_morph(
     bearing_pair(),
     [
-      metamon.mr_equivariant(
+      metamon.Equivariant(
         name: "mirror across the prime meridian gives 360 - b",
-        input: transform.new("mirror lng", both(mirror_lng)),
-        output: transform.new("360 - b", fn(b) { normalize(360.0 -. b) }),
+        input: metamon.Transform(name: "mirror lng", apply: both(mirror_lng)),
+        output: metamon.Transform(name: "360 - b", apply: fn(b) {
+          normalize(360.0 -. b)
+        }),
         relation: close,
       ),
-      metamon.mr_equivariant(
+      metamon.Equivariant(
         name: "mirror across the equator gives 180 - b",
-        input: transform.new("mirror lat", both(mirror_lat)),
-        output: transform.new("180 - b", fn(b) { normalize(180.0 -. b) }),
+        input: metamon.Transform(name: "mirror lat", apply: both(mirror_lat)),
+        output: metamon.Transform(name: "180 - b", apply: fn(b) {
+          normalize(180.0 -. b)
+        }),
         relation: close,
       ),
     ],
@@ -175,23 +189,17 @@ pub fn bearing_mirrors_with_the_points_test() -> Nil {
 
 pub fn child_tile_extends_the_parent_quadkey_test() -> Nil {
   metamon.forall(
-    generator.tuple2(point(), generator.int(range.constant(0, 22))),
+    generator.tuple2(point(), generator.int(generator.range(from: 0, to: 22))),
     fn(input) {
       let #(p, zoom) = input
-      case
-        tile.from_lat_lng(p, zoom: zoom),
-        tile.from_lat_lng(p, zoom: zoom + 1)
-      {
-        Ok(parent), Ok(child) -> {
-          let parent_key = tile.to_quadkey(parent)
-          let child_key = tile.to_quadkey(child)
-          tile.x(child) / 2 == tile.x(parent)
-          && tile.y(child) / 2 == tile.y(parent)
-          && string.starts_with(child_key, parent_key)
-          && string.length(child_key) == string.length(parent_key) + 1
-        }
-        _, _ -> False
-      }
+      let assert Ok(parent) = tile.from_lat_lng(p, zoom: zoom)
+      let assert Ok(child) = tile.from_lat_lng(p, zoom: zoom + 1)
+      let parent_key = tile.to_quadkey(parent)
+      let child_key = tile.to_quadkey(child)
+      assert tile.x(child) / 2 == tile.x(parent)
+      assert tile.y(child) / 2 == tile.y(parent)
+      assert string.starts_with(child_key, parent_key)
+      assert string.length(child_key) == string.length(parent_key) + 1
     },
   )
 }
@@ -212,29 +220,24 @@ pub fn larger_tolerance_keeps_a_subsequence_test() -> Nil {
   let route =
     generator.list_of(
       generator.map2(
-        generator.float(-10.0, 10.0),
-        generator.float(-10.0, 10.0),
+        generator.float(from: -10.0, to: 10.0),
+        generator.float(from: -10.0, to: 10.0),
         fn(lat, lng) { geokit.wrap_lat_lng(latitude: lat, longitude: lng) },
       ),
-      range.constant(0, 25),
+      length: generator.range(from: 0, to: 25),
     )
   metamon.forall(
     generator.tuple3(
       route,
-      generator.float(0.0, 2.0),
-      generator.float(0.0, 3.0),
+      generator.float(from: 0.0, to: 2.0),
+      generator.float(from: 0.0, to: 3.0),
     ),
     fn(input) {
       let #(points, small, extra) = input
-      case
-        simplify_line(points, tolerance: small),
-        simplify_line(points, tolerance: small +. extra)
-      {
-        Ok(fine), Ok(coarse) ->
-          is_subsequence(coarse, of: fine)
-          && list.length(coarse) <= list.length(fine)
-        _, _ -> False
-      }
+      let assert Ok(fine) = simplify_line(points, tolerance: small)
+      let assert Ok(coarse) = simplify_line(points, tolerance: small +. extra)
+      assert is_subsequence(coarse, of: fine)
+      assert list.length(coarse) <= list.length(fine)
     },
   )
 }

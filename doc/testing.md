@@ -26,16 +26,31 @@
 
 ## Nightly runs
 
-`.github/workflows/nightly-property.yml` runs the whole suite ten times with `METAMON_RUNS_MULTIPLIER=10`, each pass with a new seed. A failure report prints its seed, so the case can be replayed with `metamon.with_seed` and kept as a regression test.
+`.github/workflows/nightly-property.yml` runs the whole suite ten times with `METAMON_RUNS_MULTIPLIER=10`, each pass with a new seed. A failure report prints its seed, so the case can be replayed with `Config(..default_config(), seed: Some(seed))` and kept as a regression test.
 
 ## Mutation testing
 
-There is no mutation testing tool for Gleam, so `gleam_mutate.py` (from the mutation-testing lab in nao1215/debimate) is run by hand on a copy of the project. It rewrites one operator or boolean result at a time (`==`/`!=`, `&&`/`||`, float comparisons, `-.`/`+.`, `-> True`/`-> False`, a dropped `!`) and runs `gleam test` on the Erlang target. The score is killed / (killed + lived).
+`gleam run -m metamon/mutation -- run` changes one operator, `!` or boolean literal in a module under `src/` at a time and runs `gleam test --target erlang` on each change; `gleam run -m metamon/mutation -- gate` then fails on a survivor that `doc/mutation/baseline.json` does not list, and `gleam run -m metamon/mutation -- baseline` records a full run as the baseline. `.github/workflows/mutation.yml` mutates the modules a pull request changes and runs the gate; the weekly run mutates every module.
 
-| Date | Files | Killed | Lived | Score |
-|---|---|---:|---:|---:|
-| 2026-11-19 | every module under `src/` | 79 | 13 | 85.9% |
+The first run (2026-11-27) scored 87.8%. Tests were then added for polyline precision 1, tile zoom 30, a point on the antimeridian at the last tile column, and a tie between two farthest points in `simplify`, and the score rose to 89.6%. Two later runs gave the same survivors. The 29 left change nothing that a caller can see:
 
-The first run scored 68/92 (73.9%). Every simplify test started its segment at the origin, so `x2 -. x1` and `x2 +. x1` gave the same distance; a diagonal segment and a closed line away from the origin now kill those six mutants. Tile coordinates were never negative in a test and `from_lat_lng` was never given an invalid zoom, an open GeoJSON ring always differed in both coordinates, and no test passed a zero tolerance to `simplify`; tests for each now exist.
+- `geokit` (18): latitude and longitude clamps at exactly the bound, the shift by 180 degrees in `wrap_longitude` and `final_bearing`, which is the same modulo 360 either way, the order of the endpoints in `distance`, the reduction in `normalize_degrees`, whose floor is only -1, 0 or 1 for its inputs (and Gleam's division by zero gives 0), and endpoint comparisons in the point-in-polygon edge test that the other half of `between` or the side test already decides.
+- `geokit/internal/douglas_peucker` (4): the size checks of the ring fallback, which return the same four vertices, the closing vertex as a candidate, which is never farther than the others, and the tie rule of `farthest_from_chord`, which picks the same ring in the tie test.
+- `geokit/internal/centroid` (3): ring orientation at zero area and the closing of rings that are already closed.
+- `geokit/geohash` (1): lowercasing `A`, which is not in the geohash alphabet either way.
+- `geokit/geojson` (1): an integer of exactly 10^9, which is outside the coordinate range either way.
+- `geokit/polyline` (1): encoding 0 as a negative number, which writes the same `?`.
+- `geokit/tile` (1): `2 * bit_y` and `2 / bit_y`, equal for a bit of 0 or 1.
 
-The 13 survivors are boundary comparisons where `<.` and `<=.` give the same result at the boundary value (`wrap_longitude` at exactly ±180, `sqrt_nonneg` of 0, the absolute value of 0, the minimum in the bounding box, bearing normalization at 0, rounding of -0 in `polyline`), and point-in-polygon edge tests where an endpoint lies on two edges, so the other edge still reports it.
+<!-- mutation:start -->
+| Module | Killed | Lived | Timed out | Score |
+|---|---:|---:|---:|---:|
+| `geokit` | 64 | 18 | 0 | 78.0% |
+| `geokit/geohash` | 41 | 1 | 0 | 97.6% |
+| `geokit/geojson` | 5 | 1 | 0 | 83.3% |
+| `geokit/internal/centroid` | 34 | 3 | 0 | 91.9% |
+| `geokit/internal/douglas_peucker` | 21 | 4 | 0 | 84.0% |
+| `geokit/polyline` | 40 | 1 | 0 | 97.6% |
+| `geokit/tile` | 45 | 1 | 0 | 97.8% |
+| all | 250 | 29 | 0 | 89.6% |
+<!-- mutation:end -->

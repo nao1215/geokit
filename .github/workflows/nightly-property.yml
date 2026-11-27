@@ -7,7 +7,7 @@ name: nightly-property
 # it, and each draws a new random seed, so together they cover as many
 # inputs. Pull requests keep the normal count so they stay fast. A failure
 # report prints its seed, so the case can be reproduced with
-# metamon.with_seed and kept as a regression test.
+# `Config(..default_config(), seed: Some(seed))` and kept as a regression test.
 
 on:
   schedule:
