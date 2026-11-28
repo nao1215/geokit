@@ -28,6 +28,10 @@
 
 `.github/workflows/nightly-property.yml` runs the whole suite ten times with `METAMON_RUNS_MULTIPLIER=10`, each pass with a new seed. A failure report prints its seed, so the case can be replayed with `Config(..default_config(), seed: Some(seed))` and kept as a regression test.
 
+## Coverage
+
+`gleam run -m metamon/mutation -- coverage` runs the tests on the Erlang target with every module under `src/` measured and writes `build/coverage/lcov.info`. It needs Gleam 1.19 or later, newer than the floor the package supports, because older compilers do not keep the Gleam line numbers that `cover` reports. Run `gleam build --target erlang` first, since `gleam run -m` of a dependency module does not compile the package. `.github/workflows/coverage.yml` reports it with octocov on pull requests and main. The first run (2026-11-28) reached 97.0% of the lines (524 of 540).
+
 ## Mutation testing
 
 `gleam run -m metamon/mutation -- run` changes one operator, `!` or boolean literal in a module under `src/` at a time and runs `gleam test --target erlang` on each change; `gleam run -m metamon/mutation -- gate` then fails on a survivor that `doc/mutation/baseline.json` does not list, and `gleam run -m metamon/mutation -- baseline` records a full run as the baseline. `.github/workflows/mutation.yml` mutates the modules a pull request changes and runs the gate; the weekly run mutates every module.
